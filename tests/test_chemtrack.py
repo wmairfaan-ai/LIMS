@@ -99,8 +99,31 @@ class ChemTrackTests(unittest.TestCase):
         self.assertEqual([(r["amount"], r["status"]) for r in rows], [(2.5, "active"), (2.5, "active")])
 
     def test_06_flammable_limit_warning(self):
-        html = self.admin.get("/").get_data(as_text=True)
+        html = self.admin.get("/inventory").get_data(as_text=True)
         self.assertIn("over the 3 L limit", html)  # 5 L of ethanol in a 3 L cabinet
+        dash = self.admin.get("/").get_data(as_text=True)
+        self.assertIn("fill-over", dash)  # the dashboard gauge turns red
+        self.assertIn("No location over its flammable limit", dash)
+
+    def test_06b_dashboard_scan_and_actions(self):
+        r = self.admin.get("/find?code=ct-00001&action=move")
+        self.assertIn("/c/CT-00001?open=move", r.headers["Location"])
+        html = self.admin.get(r.headers["Location"]).get_data(as_text=True)
+        self.assertIn('id="act-move" open', html)
+        title = html.split("<title>", 1)[1].split("</title>", 1)[0]
+        self.assertNotIn("<", title)  # nothing but text in the browser tab title
+        self.assertEqual(self.admin.get("/find?code=ethanol").headers["Location"], "/inventory?q=ethanol")
+        dash = self.admin.get("/").get_data(as_text=True)
+        self.assertIn("Compliance score", dash)
+        self.assertIn("CT-00001", dash.split("My recent scans", 1)[1])     # just opened
+        self.assertIn("CT-00002", dash.split("Containers I received", 1)[1])
+
+    def test_06c_sign_in_page_shows_counts_only(self):
+        html = app.test_client().get("/login").get_data(as_text=True)
+        self.assertIn("Compliance score", html)
+        self.assertIn("Fullest flammable cabinet", html)
+        for secret in ("Ethanol", "64-17-5", "Flammable cabinet A", "CT-0000"):
+            self.assertNotIn(secret, html)
 
     def test_07_use_and_refuse_overuse(self):
         post(self.admin, "/c/CT-00001/use", {"amount": "0.5", "purpose": "CHM101"}, page="/c/CT-00001")
@@ -166,6 +189,11 @@ class ChemTrackTests(unittest.TestCase):
         statuses = {r["code"]: r["status"] for r in sql("SELECT code, status FROM containers")}
         self.assertEqual(statuses["CT-00001"], "active")
         self.assertEqual(statuses["CT-00003"], "missing")
+        missing = self.admin.get("/inventory?show=missing").get_data(as_text=True)
+        self.assertIn("Ethanol absolute", missing.split("<tbody>", 1)[1])
+        dash = self.admin.get("/").get_data(as_text=True)
+        self.assertIn("No missing containers", dash)
+        self.assertIn("1 missing", dash)
 
     def test_14_register_reports(self):
         post(self.admin, "/substance/new", {"name": "Sodium chloride", "unit": "kg"})
@@ -204,7 +232,7 @@ class ChemTrackTests(unittest.TestCase):
         self.assertTrue({"create", "receive", "dispose", "edit movement", "upload SDS"} <= actions, actions)
 
     def test_18_every_admin_page_loads(self):
-        for page in ["/", "/stock", "/receive", "/locations", "/location/1", "/location/1/edit", "/movements",
+        for page in ["/", "/inventory", "/inventory?show=low", "/inventory?show=empty", "/stock", "/receive", "/locations", "/location/1", "/location/1/edit", "/movements",
                      "/movements.csv", "/compliance", "/register/CI", "/chra/new", "/waste", "/stocktake",
                      "/stocktake/1", "/audit", "/analysis", "/analysis?period=365", "/staff", "/staff/log",
                      "/substance/1", "/substance/1/edit", "/c/CT-00001", "/c/CT-00001/edit",

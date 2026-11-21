@@ -52,3 +52,6 @@ SESSION_HOURS = 8
 MIN_PASSWORD_LENGTH = 8
 
 MAX_SDS_MB = 10
+
+# Show today's safety status (counts only, never chemical names) on the sign-in page
+LOGIN_STATUS = os.environ.get("CHEMTRACK_LOGIN_STATUS", "1") == "1"

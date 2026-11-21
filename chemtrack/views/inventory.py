@@ -1,7 +1,7 @@
 """Chemicals (substances), containers, QR labels, stock in / out, SDS files."""
 
 import re
-from datetime import date, datetime
+from datetime import date
 
 from flask import abort, flash, g, redirect, render_template, request, send_file, url_for
 
@@ -9,6 +9,7 @@ from .. import app, config, logic
 from ..db import get_db
 from ..qr import container_url, qr_svg
 from ..security import audit, can_edit_movement, roles_required
+from .dashboard import remember_scan
 
 CODE_RE = re.compile(r"^CT-\d{5,}$", re.I)
 
@@ -99,8 +100,19 @@ SUBSTANCE_FIELDS = ["name", "cas_no", "formula", "hazards", "unit", "min_quantit
 
 # ---------------------------------------------------------------- inventory --
 
-@app.route("/")
-def index():
+# Filters for the inventory list: key -> (label, test on an alert message)
+FILTERS = {
+    "alerts": ("Needs attention", lambda m: True),
+    "low": ("Low / out of stock", lambda m: "stock" in m),
+    "expired": ("Expired / expiring", lambda m: "xpire" in m),
+    "nosds": ("SDS to fix", lambda m: "SDS" in m),
+    "missing": ("Missing containers", lambda m: "missing" in m),
+    "empty": ("Empty, to dispose", lambda m: "empty" in m),
+}
+
+
+@app.route("/inventory")
+def inventory():
     db = get_db()
     q = request.args.get("q", "").strip()
     show = request.args.get("show", "all")
@@ -114,9 +126,11 @@ def index():
     if q:
         needle = q.lower()
         items = [i for i in items if needle in i["s"]["name"].lower() or needle in (i["s"]["cas_no"] or "")
+                 or needle in (i["s"]["formula"] or "").lower()
                  or any(needle in loc.lower() for loc in i["locations"])]
-    if show == "alerts":
-        items = [i for i in items if i["alerts"]]
+    if show in FILTERS:
+        test = FILTERS[show][1]
+        items = [i for i in items if any(test(m) for _, m in i["alerts"])]
 
     containers = logic.active_containers(db)
     summary = {
@@ -126,20 +140,26 @@ def index():
         "expiry": sum(1 for i in everything if any("xpire" in m for _, m in i["alerts"])),
         "sds": sum(1 for i in everything if any("SDS" in m for _, m in i["alerts"])),
     }
-    return render_template("index.html", items=items, summary=summary, q=q, show=show,
+    return render_template("inventory.html", items=items, summary=summary, q=q, show=show, filters=FILTERS,
                            conflicts=logic.storage_conflicts(containers),
-                           over_limit=[f for f in logic.flammable_totals(db) if f["over"]],
-                           now_hour=datetime.now().hour)
+                           over_limit=[f for f in logic.flammable_totals(db) if f["over"]])
+
+
+ACTIONS = ("use", "move", "adjust", "dispose")
 
 
 @app.route("/find")
 def find():
+    """Scan box: open the container, optionally with one action ready (?action=move)."""
     code = request.args.get("code", "").strip()
+    action = request.args.get("action", "")
     c = get_db().execute("SELECT code FROM containers WHERE code = ? COLLATE NOCASE", (code,)).fetchone()
     if c:
-        return redirect(url_for("container_view", code=c["code"]))
-    flash(f"No container with code {code}.", "danger")
-    return redirect(request.referrer or url_for("index"))
+        return redirect(url_for("container_view", code=c["code"], open=action if action in ACTIONS else None))
+    if code and not CODE_RE.match(code):  # not a code: treat it as a search
+        return redirect(url_for("inventory", q=code))
+    flash(f"No container with code {code}." if code else "Scan or type a container code.", "danger")
+    return redirect(url_for("index"))
 
 
 @app.route("/substance/new", methods=["GET", "POST"])
@@ -211,7 +231,7 @@ def substance_delete(sid):
     db.execute("DELETE FROM substances WHERE id = ?", (sid,))
     db.commit()
     flash(f"Deleted {s['name']}.", "ok")
-    return redirect(url_for("index"))
+    return redirect(url_for("inventory"))
 
 
 # --------------------------------------------------------------- SDS files --
@@ -309,8 +329,12 @@ def container_view(code):
     log = db.execute("SELECT * FROM movements WHERE container_id = ? ORDER BY created_at DESC, id DESC",
                      (c["id"],)).fetchall()
     waste = db.execute("SELECT * FROM waste_records WHERE container_id = ?", (c["id"],)).fetchone()
+    remember_scan(c["code"])
+    opened = request.args.get("open", "")
+    if opened not in ACTIONS:
+        opened = "use" if c["status"] == "active" else ""
     return render_template("container_view.html", c=c, log=log, waste=waste, locations=active_locations(),
-                           qr=qr_svg(container_url(c["code"])), alerts=logic.container_alerts(c))
+                           qr=qr_svg(container_url(c["code"])), alerts=logic.container_alerts(c), opened=opened)
 
 
 @app.route("/c/<code>/edit", methods=["GET", "POST"])

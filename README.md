@@ -29,7 +29,7 @@ A chemical's stock = the total of its active containers.
 | Task | Where |
 |---|---|
 | **New bottles arrive** | **Inventory › Receive containers**: choose the chemical, size, how many, location, lot, expiry → **print the QR labels** and stick them on |
-| **Use some** | Scan the bottle's QR with a phone → **Use**. Or the green **Stock in / out** button → scan / type the code → amount |
+| **Use some** | **Dashboard**: choose *Use* → scan the bottle → amount. Or scan its QR with a phone, or use the green **Stock in / out** button |
 | **Move a bottle** | Container page → **Move** |
 | **Weighed it and the amount is different** | Container page → **Correct amount** (reason required) |
 | **Empty or expired** | Container page → **Dispose** (+ scheduled waste record with SW code) |
@@ -38,7 +38,19 @@ A chemical's stock = the total of its active containers.
 
 ## Pages
 
-- **Inventory**: chemicals with totals, containers, locations and alerts (low stock, expiry, SDS, missing, empty to dispose); storage problems (incompatible chemicals together, flammable limit exceeded)
+- **Sign-in page**: split design. The left side shows **today's safety status, as counts only**
+  (compliance score, chemicals needing attention, fullest flammable cabinet, days to CHRA review).
+  It never shows chemical names or amounts. To hide it, set `CHEMTRACK_LOGIN_STATUS=0`.
+- **Dashboard** (first page after sign-in), combining a scan-first layout with a safety control room:
+  - **Scan box**: pick **Use / Move / Correct / Dispose**, then scan a QR label (or type a code). The container
+    opens with that action ready and the cursor in place. Typing a chemical name searches the inventory instead
+  - **Compliance score** (%) and **checklist** of 10 checks (SDS uploaded, SDS age, CHRA, stocktakes,
+    flammable limits set and not exceeded, segregation, expired, empties, missing), each with a **Fix** link
+  - **Action needed** tiles: expired, expiring, low stock, SDS to fix, missing, empty to dispose. Each opens the filtered inventory
+  - **Flammable storage gauges** per location (amber at 80%, red when over the limit)
+  - **My recent scans** and **Containers I received**; 🚨 emergency list; ➕ Receive containers
+- **Inventory**: chemicals with totals, containers, locations and alerts; filters *Needs attention, Low / out of stock,
+  Expired / expiring, SDS to fix, Missing, Empty*; storage problems (incompatible chemicals together, flammable limit exceeded)
 - **Chemical page**: details, regulatory flags, **SDS PDF** (upload / open), all its containers with fill gauges, recent activity
 - **Container page** (where the QR leads): amount left, location, lot, dates, **QR code**, actions (use, move, correct, dispose), history, print label
 - **Locations**: rooms and storage units, storage types, **flammable litres vs limit**, incompatible storage warnings, **🚨 printable emergency list** per room (for Bomba / lab door), start a **stocktake**
@@ -118,7 +130,7 @@ python seed.py
 ```powershell
 python -m unittest discover -s tests -v
 ```
-19 checks (security, receiving, labels, use/over-use, scanning, moving, correcting with
+21 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
 recalculation, disposal + waste, SDS upload safety, stocktake, registers, CHRA dates, roles,
 audit log, every page, and conversion of an old database). They use a temporary database.
 Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.

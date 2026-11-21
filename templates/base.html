@@ -25,7 +25,8 @@
     <a class="brand" href="{{ url_for('index') }}">{{ icon('flask') }}<span>ChemTrack</span></a>
 
     <nav class="tabs" aria-label="Main">
-      <a href="{{ url_for('index') }}" class="{{ 'active' if ep in ('index', 'substance_view', 'substance_new', 'substance_edit', 'container_view', 'container_edit', 'receive', 'labels') }}">Inventory</a>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if ep == 'index' }}">Dashboard</a>
+      <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep in ('inventory', 'substance_view', 'substance_new', 'substance_edit', 'container_view', 'container_edit', 'receive', 'labels') }}">Inventory</a>
       <a href="{{ url_for('locations') }}" class="{{ 'active' if ep in ('locations', 'location_view', 'location_edit', 'emergency') }}">Locations</a>
       <a href="{{ url_for('movements') }}" class="{{ 'active' if ep in ('movements', 'movement_edit') }}">Movements</a>
       <a href="{{ url_for('compliance') }}" class="{{ 'active' if ep in ('compliance', 'register_report', 'chra_form', 'waste', 'stocktake_list', 'stocktake_view', 'audit_log') }}">Compliance</a>
@@ -33,9 +34,9 @@
       {% if is_admin() %}<a href="{{ url_for('staff_list') }}" class="{{ 'active' if ep in ('staff_list', 'login_history', 'staff_add', 'staff_reset') }}">Staff</a>{% endif %}
     </nav>
 
-    <form class="topsearch" action="{{ url_for('index') }}" method="get" role="search">
+    <form class="topsearch" action="{{ url_for('inventory') }}" method="get" role="search">
       {{ icon('search') }}
-      <input type="search" name="q" value="{{ request.args.get('q', '') if ep == 'index' else '' }}"
+      <input type="search" name="q" value="{{ request.args.get('q', '') if ep == 'inventory' else '' }}"
              placeholder="Chemical, CAS no., location or CT- code" aria-label="Search chemicals or scan a container code">
     </form>
 
@@ -44,7 +45,7 @@
         <a class="btn-stock {{ 'active' if ep == 'stock_page' }}" href="{{ url_for('stock_page') }}">{{ icon('swap') }}<span>Stock in / out</span></a>
       {% endif %}
 
-      <a class="iconbtn" href="{{ url_for('index', show='alerts') }}"
+      <a class="iconbtn" href="{{ url_for('inventory', show='alerts') }}"
          title="{{ attention }} item{{ 's' if attention != 1 }} need attention"
          aria-label="{{ attention }} items need attention">
         {{ icon('bell') }}{% if attention %}<span class="dot">{{ attention }}</span>{% endif %}

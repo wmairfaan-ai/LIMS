@@ -11,7 +11,7 @@
     <strong>{{ rows | length }} label{{ 's' if rows | length != 1 }}</strong>
     <span class="muted">Print on A4 sticker paper or plain paper and tape on. Size about 7 × 4 cm.</span>
     <button onclick="window.print()">🖨️ Print</button>
-    <a class="link" href="{{ url_for('container_view', code=rows[0].c.code) if rows | length == 1 else url_for('index') }}">Back</a>
+    <a class="link" href="{{ url_for('container_view', code=rows[0].c.code) if rows | length == 1 else url_for('inventory') }}">Back</a>
   </div>
   <div class="label-sheet">
     {% for r in rows %}{% set c = r.c %}

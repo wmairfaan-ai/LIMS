@@ -63,7 +63,7 @@
 
   <div class="actions">
     <button type="submit">{{ 'Save' if editing else 'Save and receive containers' }}</button>
-    <a class="link" href="{{ url_for('substance_view', sid=s.id) if editing else url_for('index') }}">Cancel</a>
+    <a class="link" href="{{ url_for('substance_view', sid=s.id) if editing else url_for('inventory') }}">Cancel</a>
   </div>
 </form>
 {% endblock %}

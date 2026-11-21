@@ -48,7 +48,7 @@
 {% if can_edit() and live %}
 <div class="actions-grid">
   {% if c.status == 'active' %}
-  <details class="action-card" open>
+  <details class="action-card" id="act-use" {{ 'open' if opened == 'use' }}>
     <summary>➖ Use</summary>
     <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='use') }}">
       {{ csrf_field() }}
@@ -58,7 +58,7 @@
     </form>
   </details>
   {% endif %}
-  <details class="action-card">
+  <details class="action-card" id="act-move" {{ 'open' if opened == 'move' }}>
     <summary>↔️ Move</summary>
     <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='move') }}">
       {{ csrf_field() }}
@@ -71,7 +71,7 @@
       <button type="submit" class="secondary-btn">Move</button>
     </form>
   </details>
-  <details class="action-card">
+  <details class="action-card" id="act-adjust" {{ 'open' if opened == 'adjust' }}>
     <summary>⚖️ Correct amount</summary>
     <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='adjust') }}">
       {{ csrf_field() }}
@@ -80,7 +80,7 @@
       <button type="submit" class="secondary-btn">Save correction</button>
     </form>
   </details>
-  <details class="action-card">
+  <details class="action-card" id="act-dispose" {{ 'open' if opened == 'dispose' }}>
     <summary>🗑️ Dispose</summary>
     <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='dispose') }}"
           onsubmit="return confirm('Dispose of {{ c.code }}? It will be removed from stock.');">
@@ -112,4 +112,17 @@
   <h2>History</h2>
   {% include "_movement_rows.html" %}
 </section>
+{% if request.args.get('open') and opened %}
+<script>
+  // Came from the dashboard scan box with an action chosen: jump to it, ready to type
+  (function () {
+    var card = document.getElementById('act-{{ opened }}');
+    if (!card) return;
+    card.classList.add('action-picked');
+    card.scrollIntoView({block: 'center'});
+    var field = card.querySelector('input:not([type=hidden]):not([type=checkbox]), select');
+    if (field) field.focus({preventScroll: true});
+  })();
+</script>
+{% endif %}
 {% endblock %}

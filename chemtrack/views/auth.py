@@ -83,7 +83,9 @@ def login():
                     log_login(staff_id, user["id"], False, "Wrong password")
             error = "Staff ID or password is wrong."
         db.commit()
-    return render_template("login.html", error=error, staff_id=staff_id, next=request.values.get("next", ""))
+    from .dashboard import public_status  # counts only, never chemical names
+    return render_template("login.html", error=error, staff_id=staff_id, next=request.values.get("next", ""),
+                           status=public_status(get_db()))
 
 
 @app.route("/setup", methods=["GET", "POST"])

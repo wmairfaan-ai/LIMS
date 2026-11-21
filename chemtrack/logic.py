@@ -209,3 +209,75 @@ def add_years(d, years):
         return d.replace(year=d.year + years)
     except ValueError:  # 29 Feb
         return d + timedelta(days=365 * years)
+
+
+# ---------------------------------------------------------- dashboard score --
+
+def compliance_checklist(db):
+    """
+    Safety and compliance checks for the dashboard. Each item scores 0..1;
+    the compliance score is the average, as a percentage.
+    Each item: key, label, score, detail, fix (endpoint, args) for a "Fix" link.
+    """
+    today = date.today()
+    items = substances_overview(db)
+    in_use = [i for i in items if i["n_active"]]
+    containers = active_containers(db)
+    flam = flammable_totals(db)
+    checks = []
+
+    def add(key, label, score, detail, fix):
+        checks.append({"key": key, "label": label, "score": max(0.0, min(1.0, score)),
+                       "ok": score >= 0.999, "detail": detail, "fix": fix})
+
+    n = len(in_use)
+    with_sds = sum(1 for i in in_use if i["s"]["sds_file"])
+    add("sds", "SDS uploaded for every chemical in use", with_sds / n if n else 1,
+        f"{with_sds} of {n}", ("compliance", {}))
+
+    old = sum(1 for i in in_use if any("SDS over" in m for _, m in i["alerts"]))
+    add("sds_age", "No SDS older than 5 years", 1 - old / n if n else 1,
+        f"{old} too old" if old else "All current", ("compliance", {}))
+
+    chra = db.execute("SELECT next_review FROM assessments").fetchall()
+    valid = [a for a in chra if (parse_date(a["next_review"]) or today) >= today]
+    add("chra", "CHRA recorded and not overdue", 1 if valid else 0,
+        "Valid" if valid else ("Overdue" if chra else "None recorded"), ("compliance", {}))
+
+    locs = [l for l in db.execute("SELECT id FROM locations WHERE active = 1")]
+    used_locs = {c["location_id"] for c in containers if c["location_id"]}
+    recent = {r[0] for r in db.execute(
+        "SELECT DISTINCT location_id FROM stocktakes WHERE finished_at >= ?",
+        ((today - timedelta(days=config.STOCKTAKE_WARNING_DAYS)).isoformat(),))}
+    checked = len(used_locs & recent)
+    add("stocktake", "Stocktake done in the last 12 months", checked / len(used_locs) if used_locs else 1,
+        f"{checked} of {len(used_locs)} locations", ("stocktake_list", {}))
+
+    with_flam = [f for f in flam if f["litres"]]
+    limited = sum(1 for f in with_flam if f["limit"] is not None)
+    add("flam_limits", "Flammable limit set where flammables are stored",
+        limited / len(with_flam) if with_flam else 1, f"{limited} of {len(with_flam)} locations", ("locations", {}))
+
+    over = sum(1 for f in flam if f["over"])
+    add("flam_over", "No location over its flammable limit", 0 if over else 1,
+        f"{over} over limit" if over else "All within limits", ("locations", {}))
+
+    conflicts = storage_conflicts(containers)
+    add("segregation", "Incompatible chemicals stored apart", 0 if conflicts else 1,
+        f"{len(conflicts)} problem(s)" if conflicts else "OK", ("inventory", {}))
+
+    expired = sum(1 for c in containers if c["status"] == "active"
+                  and (parse_date(c["expiry_date"]) or date.max) < today)
+    add("expired", "No expired containers in use", 0 if expired else 1,
+        f"{expired} expired" if expired else "None", ("inventory", {"show": "expired"}))
+
+    empties = sum(1 for c in containers if c["status"] == "empty")
+    add("empties", "Empty containers disposed of", 0 if empties else 1,
+        f"{empties} waiting" if empties else "None waiting", ("inventory", {"show": "empty"}))
+
+    missing = db.execute("SELECT COUNT(*) FROM containers WHERE status = 'missing'").fetchone()[0]
+    add("missing", "No missing containers", 0 if missing else 1,
+        f"{missing} missing" if missing else "None", ("inventory", {"show": "missing"}))
+
+    score = round(sum(c["score"] for c in checks) / len(checks) * 100) if checks else 100
+    return score, checks

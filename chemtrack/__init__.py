@@ -132,4 +132,4 @@ def too_large(_e):
 migrate()
 
 # The pages (imported last: they use `app` from this module)
-from .views import auth, inventory, locations, compliance, reports  # noqa: E402,F401
+from .views import auth, dashboard, inventory, locations, compliance, reports  # noqa: E402,F401

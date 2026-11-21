@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+
+<div class="head">
+  <div>
+    <h1>Good {{ 'morning' if now_hour < 12 else 'afternoon' if now_hour < 18 else 'evening' }}, {{ current_user.name.split()[0] }}</h1>
+    <p class="muted">{{ today }} · {{ today_moves }} movement{{ 's' if today_moves != 1 }} recorded today</p>
+  </div>
+  <div class="actions">
+    <a class="button danger-outline" href="{{ url_for('emergency') }}" target="_blank" rel="noopener">🚨 Emergency list</a>
+    {% if can_edit() %}<a class="button" href="{{ url_for('receive') }}">➕ Receive containers</a>{% endif %}
+  </div>
+</div>
+
+<div class="dash-top">
+  <!-- A: scan first -->
+  <section class="panel scan-hero">
+    <form method="get" action="{{ url_for('find') }}" class="scan-hero-form">
+      {% if can_edit() %}
+      <div class="quick" role="radiogroup" aria-label="What do you want to do after scanning?">
+        {% for key, label, icon, hint in quick %}
+          <label class="quick-tile" title="{{ hint }}">
+            <input type="radio" name="action" value="{{ key }}" {{ 'checked' if loop.first }}>
+            <span><b>{{ icon }}</b>{{ label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <label class="scan-label" for="scan">Scan a QR label or type a code</label>
+      <div class="scan-row">
+        <input id="scan" name="code" class="scan-input" placeholder="CT-00001" autocomplete="off" autofocus required>
+        <button type="submit">Open</button>
+      </div>
+      <p class="muted small-text">A USB or Bluetooth QR scanner types here automatically. Chemical names work too.</p>
+    </form>
+  </section>
+
+  <!-- B: compliance score -->
+  <section class="panel score-panel">
+    <div class="score-ring {{ 'ring-ok' if score >= 85 else 'ring-warn' if score >= 60 else 'ring-bad' }}"
+         style="--pct: {{ score }}" role="img" aria-label="Compliance score {{ score }} percent">
+      <span>{{ score }}<small>%</small></span>
+    </div>
+    <div class="score-text">
+      <h2>Compliance score</h2>
+      <p class="muted small-text">{{ checklist | selectattr('ok') | list | length }} of {{ checklist | length }} checks passed</p>
+      <a class="link" href="#checklist">See checklist ↓</a>
+    </div>
+  </section>
+</div>
+
+<!-- B: action needed -->
+<section class="action-strip" aria-label="Action needed">
+  {% for level, label, n, show in actions %}
+    <a class="action-tile {{ 'tile-' ~ level if n else 'tile-clear' }}" href="{{ url_for('inventory', show=show) }}">
+      <span class="tile-num">{{ n }}</span><span>{{ label }}</span>
+    </a>
+  {% endfor %}
+</section>
+
+{% for c in conflicts %}
+  <div class="flash flash-danger">⚠️ <a href="{{ url_for('location_view', lid=c.location_id) }}">{{ c.location }}</a>:
+    {{ c.a }} ({{ c.a_names | join(', ') }}) is stored with {{ c.b }} ({{ c.b_names | join(', ') }}).</div>
+{% endfor %}
+
+<div class="grid">
+  <!-- B: cabinet gauges -->
+  <section class="panel">
+    <h2>🔥 Flammable storage</h2>
+    {% for f in flam %}
+      <div class="gauge-row">
+        <a href="{{ url_for('location_view', lid=f.loc.id) }}">{{ location_label(f.loc) }}</a>
+        <span class="nowrap">{{ f.litres | qty }} L{% if f.limit is not none %} / {{ f.limit | qty }} L{% endif %}</span>
+      </div>
+      {% if f.limit is not none %}
+        <div class="fill fill-lg {{ 'fill-over' if f.over else 'fill-high' if f.pct >= 80 }}"><span style="width: {{ f.pct }}%"></span></div>
+      {% else %}
+        <p class="small-text text-warn">No limit set. {% if is_admin() %}<a href="{{ url_for('location_edit', lid=f.loc.id) }}">Set one</a>{% endif %}</p>
+      {% endif %}
+    {% else %}
+      <p class="muted">No flammable liquids in stock.</p>
+    {% endfor %}
+  </section>
+
+  <!-- B: checklist -->
+  <section class="panel" id="checklist">
+    <h2>✅ Compliance checklist</h2>
+    {% for c in checklist | sort(attribute='score') %}
+      <div class="check-row {{ 'check-ok' if c.ok else 'check-bad' }}">
+        <span class="check-icon" aria-hidden="true">{{ '✓' if c.ok else '!' }}</span>
+        <span class="check-label">{{ c.label }}<span class="muted"> · {{ c.detail }}</span></span>
+        {% if not c.ok %}<a class="small-text" href="{{ url_for(c.fix[0], **c.fix[1]) }}">Fix</a>{% endif %}
+      </div>
+    {% endfor %}
+  </section>
+</div>
+
+<div class="grid">
+  <!-- A: my recent scans -->
+  <section class="panel">
+    <h2>🕘 My recent scans</h2>
+    {% for r in recent %}
+      <a class="mini-row" href="{{ url_for('container_view', code=r.code) }}">
+        <span class="mono">{{ r.code }}</span><span class="grow">{{ r.name }}</span>
+        <span class="nowrap">{{ r.amount | qty }} {{ r.unit }}</span>
+        {% if r.status != 'active' %}<span class="tag tag-{{ 'danger' if r.status == 'missing' else 'muted' }}">{{ r.status }}</span>{% endif %}
+      </a>
+    {% else %}
+      <p class="muted">Containers you open appear here.</p>
+    {% endfor %}
+  </section>
+
+  <!-- A: my containers -->
+  <section class="panel">
+    <h2>🧪 Containers I received</h2>
+    {% for r in mine %}
+      <a class="mini-row" href="{{ url_for('container_view', code=r.code) }}">
+        <span class="mono">{{ r.code }}</span><span class="grow">{{ r.name }}</span>
+        <span class="nowrap">{{ r.amount | qty }} / {{ r.size | qty }} {{ r.unit }}</span>
+      </a>
+    {% else %}
+      <p class="muted">None yet. {% if can_edit() %}<a href="{{ url_for('receive') }}">Receive containers</a>.{% endif %}</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

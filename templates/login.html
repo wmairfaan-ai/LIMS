@@ -2,26 +2,47 @@
 {% block title %}Sign in{% endblock %}
 {% block body_class %}auth-page{% endblock %}
 {% block content %}
-<div class="auth-card">
-  <div class="auth-head">
-    <div class="auth-logo" aria-hidden="true">⚗️</div>
-    <h1>ChemTrack</h1>
-    <p class="muted">Sign in with your staff account</p>
+<div class="auth-split {{ '' if status else 'no-status' }}">
+  {% if status %}
+  <aside class="auth-status" aria-label="Lab safety status today">
+    <div class="auth-brand">⚗️ ChemTrack</div>
+    <p class="auth-tag">Lab safety at a glance</p>
+    <ul class="status-list">
+      <li><span class="st-num">{{ status.score }}%</span><span>Compliance score</span></li>
+      <li><span class="st-num {{ 'st-warn' if status.attention }}">{{ status.attention }}</span><span>Chemicals needing attention</span></li>
+      {% if status.fullest is not none %}
+        <li><span class="st-num {{ 'st-bad' if status.fullest > 100 else 'st-warn' if status.fullest >= 80 }}">{{ status.fullest }}%</span><span>Fullest flammable cabinet</span></li>
+      {% endif %}
+      {% if status.chra_days is not none %}
+        <li><span class="st-num {{ 'st-bad' if status.chra_days < 0 else 'st-warn' if status.chra_days <= 90 }}">{{ status.chra_days if status.chra_days >= 0 else 'Overdue' }}</span>
+            <span>{{ 'Days until CHRA review' if status.chra_days >= 0 else 'CHRA review' }}</span></li>
+      {% endif %}
+    </ul>
+    <p class="auth-foot">Scan · Use · Done. Sign in to see details.</p>
+  </aside>
+  {% endif %}
+
+  <div class="auth-card">
+    <div class="auth-head">
+      {% if not status %}<div class="auth-logo" aria-hidden="true">⚗️</div>{% endif %}
+      <h1>{{ 'Sign in' if status else 'ChemTrack' }}</h1>
+      <p class="muted">Use your staff account</p>
+    </div>
+
+    {% if error %}<div class="flash flash-danger" role="alert">{{ error }}</div>{% endif %}
+
+    <form class="form" method="post" action="{{ url_for('login') }}">
+      {{ csrf_field() }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <label>Staff ID
+        <input name="staff_id" value="{{ staff_id }}" required autofocus autocomplete="username" placeholder="TU-LAB-014">
+      </label>
+      <label>Password
+        <input name="password" type="password" required autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn-block">Sign in</button>
+    </form>
+    <p class="muted center small-note">Forgot your password? Ask the lab admin to reset it.</p>
   </div>
-
-  {% if error %}<div class="flash flash-danger" role="alert">{{ error }}</div>{% endif %}
-
-  <form class="form" method="post" action="{{ url_for('login') }}">
-    {{ csrf_field() }}
-    <input type="hidden" name="next" value="{{ next }}">
-    <label>Staff ID
-      <input name="staff_id" value="{{ staff_id }}" required autofocus autocomplete="username" placeholder="TU-LAB-014">
-    </label>
-    <label>Password
-      <input name="password" type="password" required autocomplete="current-password">
-    </label>
-    <button type="submit" class="btn-block">Sign in</button>
-  </form>
-  <p class="muted center small-note">Forgot your password? Ask the lab admin to reset it.</p>
 </div>
 {% endblock %}

@@ -5,7 +5,7 @@
 <div class="head">
   <div>
     <h1>Inventory</h1>
-    <p class="muted">Good {{ 'morning' if now_hour < 12 else 'afternoon' if now_hour < 18 else 'evening' }}, {{ current_user.name.split()[0] }}.</p>
+    <p class="muted">Every chemical with its total across containers.{% if show in filters %} Showing: <strong>{{ filters[show][0] }}</strong>.{% endif %}</p>
   </div>
   <div class="actions">
     <a class="button secondary" href="{{ url_for('register_csv', kind='CI') }}">Export inventory</a>
@@ -41,11 +41,13 @@
 {% endif %}
 
 <div class="toolbar">
-  <nav class="seg" aria-label="Filter chemicals">
-    <a class="{{ 'active' if show != 'alerts' }}" href="{{ url_for('index', q=q or None) }}">All chemicals</a>
-    <a class="{{ 'active' if show == 'alerts' }}" href="{{ url_for('index', show='alerts', q=q or None) }}">Needs attention</a>
+  <nav class="seg seg-wrap" aria-label="Filter chemicals">
+    <a class="{{ 'active' if show not in filters }}" href="{{ url_for('inventory', q=q or None) }}">All</a>
+    {% for key, f in filters.items() %}
+      <a class="{{ 'active' if show == key }}" href="{{ url_for('inventory', show=key, q=q or None) }}">{{ f[0] }}</a>
+    {% endfor %}
   </nav>
-  {% if q %}<span class="muted">Results for “{{ q }}”</span> <a class="link" href="{{ url_for('index', show=show if show == 'alerts' else None) }}">Clear search</a>{% endif %}
+  {% if q %}<span class="muted">Results for “{{ q }}”</span> <a class="link" href="{{ url_for('inventory', show=show if show in filters else None) }}">Clear search</a>{% endif %}
 </div>
 
 {% if items %}
