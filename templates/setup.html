@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}First-time setup{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block content %}
+<div class="auth-card wide">
+  <div class="auth-head">
+    <div class="auth-logo" aria-hidden="true">⚗️</div>
+    <h1>Welcome to ChemTrack</h1>
+    <p class="muted">Create the admin account. You'll add your lab staff after this.</p>
+  </div>
+
+  {% if error %}<div class="flash flash-danger" role="alert">{{ error }}</div>{% endif %}
+
+  <form class="form" method="post" action="{{ url_for('setup') }}">
+    {{ csrf_field() }}
+    <div class="row">
+      <label>Staff ID
+        <input name="staff_id" value="{{ form.staff_id or '' }}" required autofocus autocomplete="username" placeholder="TU-LAB-014">
+      </label>
+      <label>Full name
+        <input name="name" value="{{ form.name or '' }}" required autocomplete="name">
+      </label>
+    </div>
+    <div class="row">
+      <label>Password
+        <input name="password" type="password" required minlength="8" autocomplete="new-password">
+        <small>At least 8 characters.</small>
+      </label>
+      <label>Confirm password
+        <input name="confirm" type="password" required minlength="8" autocomplete="new-password">
+      </label>
+    </div>
+    <button type="submit" class="btn-block">Create admin account</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Stock in / out{% endblock %}
+{% block content %}
+
+<h1>Stock in / out</h1>
+
+<div class="grid">
+  <section class="panel">
+    <form class="form" method="post" action="{{ url_for('stock_page') }}">
+      {{ csrf_field() }}
+      <div class="type-switch" role="radiogroup" aria-label="Movement type">
+        <label class="type-option type-out">
+          <input type="radio" name="type" value="OUT" {{ 'checked' if selected_type != 'IN' }}>
+          <span>➖ Stock out<small>Used / taken from store</small></span>
+        </label>
+        <label class="type-option type-in">
+          <input type="radio" name="type" value="IN" {{ 'checked' if selected_type == 'IN' }}>
+          <span>➕ Stock in<small>Received / restocked</small></span>
+        </label>
+      </div>
+
+      <label>Chemical *
+        <select name="chemical_id" required>
+          <option value="">Choose a chemical…</option>
+          {% for c in chemicals %}
+            <option value="{{ c.id }}" {{ 'selected' if selected_chem == c.id|string }}>
+              {{ c.name }} ({{ c.id | chem_code }}) | in stock: {{ c.quantity | qty }} {{ c.unit }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <div class="row">
+        <label>Amount *
+          <input name="amount" type="number" step="any" min="0" required placeholder="Same unit as the chemical">
+        </label>
+        <label>Recorded by
+          <input value="{{ current_user.name }}" disabled>
+        </label>
+      </div>
+      <label>Purpose
+        <input name="purpose" placeholder="e.g. CHM101 practical, restock">
+      </label>
+      <label>Reference (PO / DO / invoice no.)
+        <input name="reference" placeholder="e.g. PO-2611-014">
+      </label>
+      <button type="submit">Save movement</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Last 10 movements</h2>
+    {% if recent %}
+      <table class="compact">
+        <thead><tr><th>ID</th><th>Chemical</th><th class="right">Qty</th><th class="right">Balance</th><th></th></tr></thead>
+        <tbody>
+          {% for t in recent %}
+            <tr>
+              <td class="mono">{{ t.id | tx_code }}</td>
+              <td>{{ t.name }}<div class="muted">{{ t.created_at[:16] }} · {{ t.user_name or '–' }}</div></td>
+              <td class="right {{ 'qty-in' if t.type == 'IN' else 'qty-out' }}">{{ '+' if t.type == 'IN' else '−' }}{{ t.amount | qty }} {{ t.unit }}</td>
+              <td class="right">{% if t.balance_after is not none %}{{ t.balance_after | qty }} {{ t.unit }}{% else %}–{% endif %}</td>
+              <td>{% if can_edit_movement(t) %}<a href="{{ url_for('edit_movement', tx_id=t.id, next=url_for('stock_page')) }}">Edit</a>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">No movements yet.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

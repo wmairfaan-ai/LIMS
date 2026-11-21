@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Edit movement{% endblock %}
+{% block content %}
+
+<div class="muted mono">{{ tx.id | tx_code }}</div>
+<h1>Edit movement</h1>
+<p class="muted">
+  {{ tx.name }} · recorded {{ tx.created_at[:16] }} by {{ tx.user_name or 'unknown' }}
+  {% if tx.edited_at %} · last edited {{ tx.edited_at[:16] }}{% if tx.edited_by %} by {{ tx.edited_by }}{% endif %}{% endif %}
+</p>
+
+<div class="grid">
+  <section class="panel">
+    <form class="form" method="post">
+      {{ csrf_field() }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="type-switch" role="radiogroup" aria-label="Movement type">
+        <label class="type-option type-out">
+          <input type="radio" name="type" value="OUT" {{ 'checked' if form.type == 'OUT' }}>
+          <span>➖ Stock out</span>
+        </label>
+        <label class="type-option type-in">
+          <input type="radio" name="type" value="IN" {{ 'checked' if form.type == 'IN' }}>
+          <span>➕ Stock in</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>Amount ({{ tx.unit }}) *
+          <input name="amount" type="number" step="any" min="0" required value="{{ form.amount | qty if form.amount is number else form.amount }}">
+        </label>
+        <label>Recorded by
+          <input value="{{ tx.user_name or 'unknown' }}" disabled>
+        </label>
+      </div>
+      <label>Purpose
+        <input name="purpose" value="{{ form.purpose or '' }}">
+      </label>
+      <label>Reference (PO / DO / invoice no.)
+        <input name="reference" value="{{ form.reference or '' }}">
+      </label>
+      <div class="actions">
+        <button type="submit">Save changes</button>
+        <a class="link" href="{{ next }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>What happens when you save</h2>
+    <ul class="help">
+      <li>If you change the <strong>amount</strong> or <strong>type</strong>, the current stock of
+        {{ tx.name }} (now {{ tx.stock | qty }} {{ tx.unit }}) and the balance of every later movement
+        are recalculated automatically.</li>
+      <li>The change is refused if it would make the stock negative at any point.</li>
+      <li>The movement is marked <span class="tag tag-warn">edited</span> with your name, so corrections stay visible.</li>
+      {% if not is_admin() %}<li>Staff can only correct their own movements on the day they were recorded. Ask an admin for older ones.</li>{% endif %}
+    </ul>
+
+    <form method="post" action="{{ url_for('delete_movement', tx_id=tx.id) }}"
+          onsubmit="return confirm('Delete this movement? The stock will be recalculated. This cannot be undone.');">
+      {{ csrf_field() }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="danger" type="submit">Delete movement</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

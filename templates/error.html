@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block body_class %}{{ '' if current_user else 'auth-page' }}{% endblock %}
+{% block content %}
+<div class="{{ 'narrow' if current_user else 'auth-card' }}">
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ message }}</p>
+  <a class="button" href="{{ url_for('index') }}">Back to inventory</a>
+</div>
+{% endblock %}

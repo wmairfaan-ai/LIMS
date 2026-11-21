@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Staff accounts{% endblock %}
+{% block content %}
+
+<div class="head">
+  <div>
+    <h1>Staff accounts</h1>
+    <p class="muted">Staff are disabled, not deleted, so their stock history stays traceable.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('login_history') }}">Sign-in log</a>
+</div>
+
+{% if new_login %}
+<section class="panel panel-secret" role="status">
+  <h2>{{ new_login.action }} for {{ new_login.name }}</h2>
+  <p>Give these sign-in details to {{ new_login.name }} in person. The temporary password is
+     <strong>shown only once</strong>. They'll choose their own password when they first sign in.</p>
+  <dl class="secret">
+    <dt>Staff ID</dt><dd class="mono">{{ new_login.staff_id }}</dd>
+    <dt>Temporary password</dt><dd class="mono big">{{ new_login.password }}</dd>
+  </dl>
+</section>
+{% endif %}
+
+<div class="grid staff-grid">
+  <section class="panel">
+    <h2>Add staff</h2>
+    <form class="form" method="post" action="{{ url_for('staff_add') }}">
+      {{ csrf_field() }}
+      <label>Staff ID
+        <input name="staff_id" required placeholder="TU-LAB-021">
+      </label>
+      <label>Full name
+        <input name="name" required>
+      </label>
+      <label>Role
+        <select name="role">
+          <option value="staff">Staff: record stock, add and edit chemicals</option>
+          <option value="viewer">Viewer: read only</option>
+          <option value="admin">Admin: everything, including staff accounts</option>
+        </select>
+      </label>
+      <button type="submit">Add staff</button>
+      <small class="muted">A temporary password is created for you to hand over.</small>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Accounts <span class="muted">({{ users | length }})</span></h2>
+    <div class="table-wrap flat">
+    <table>
+      <thead><tr><th>Staff ID</th><th>Name and role</th><th>Status</th><th>Last sign-in</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for u in users %}
+          {% set locked = u.locked_until and u.locked_until > now.strftime('%Y-%m-%d %H:%M:%S') %}
+          <tr class="{{ 'row-muted' if not u.active }}">
+            <td class="mono nowrap">{{ u.staff_id }}</td>
+            <td>
+              <form class="inline-edit" method="post" action="{{ url_for('staff_update', user_id=u.id) }}">
+                {{ csrf_field() }}
+                <input name="name" value="{{ u.name }}" aria-label="Name of {{ u.staff_id }}">
+                <select name="role" aria-label="Role of {{ u.name }}">
+                  {% for key, label in ROLES.items() %}<option value="{{ key }}" {{ 'selected' if u.role == key }}>{{ label }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="small-btn secondary-btn">Save</button>
+              </form>
+            </td>
+            <td class="nowrap">
+              {% if not u.active %}<span class="tag tag-muted">Disabled</span>
+              {% elif locked %}<span class="tag tag-danger">Locked</span>
+              {% elif u.must_change_password %}<span class="tag tag-warn">Awaiting first sign-in</span>
+              {% else %}<span class="tag tag-ok">Active</span>{% endif %}
+              {% if u.id == current_user.id %}<span class="tag tag-out">You</span>{% endif %}
+            </td>
+            <td class="nowrap">{{ u.last_login[:16] if u.last_login else 'Never' }}</td>
+            <td class="nowrap">
+              <form method="post" action="{{ url_for('staff_reset', user_id=u.id) }}" class="inline"
+                    onsubmit="return confirm('Reset this password? They will need the new temporary password to sign in.');">
+                {{ csrf_field() }}<button type="submit" class="small-btn secondary-btn">Reset password</button>
+              </form>
+              {% if u.id != current_user.id %}
+              <form method="post" action="{{ url_for('staff_toggle', user_id=u.id) }}" class="inline">
+                {{ csrf_field() }}<button type="submit" class="small-btn {{ 'danger-btn' if u.active else 'secondary-btn' }}">{{ 'Disable' if u.active else 'Enable' }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</div>
+
+<section class="panel">
+  <h2>What each role can do</h2>
+  <div class="table-wrap flat">
+  <table class="compact roles-table">
+    <thead><tr><th>Action</th><th>Admin</th><th>Staff</th><th>Viewer</th></tr></thead>
+    <tbody>
+      <tr><td>View inventory, movements and analysis; export CSV</td><td>✓</td><td>✓</td><td>✓</td></tr>
+      <tr><td>Record stock in / out</td><td>✓</td><td>✓</td><td>–</td></tr>
+      <tr><td>Add and edit chemicals</td><td>✓</td><td>✓</td><td>–</td></tr>
+      <tr><td>Edit or delete own movements (same day)</td><td>✓</td><td>✓</td><td>–</td></tr>
+      <tr><td>Edit or delete any movement</td><td>✓</td><td>–</td><td>–</td></tr>
+      <tr><td>Delete chemicals; manage staff accounts</td><td>✓</td><td>–</td><td>–</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}

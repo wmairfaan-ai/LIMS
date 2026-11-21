@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Sign-in log{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Sign-in log</h1>
+    <p class="muted">Last 200 sign-in attempts. Many failed attempts on one account can mean someone is guessing.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('staff_list') }}">Staff accounts</a>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Date and time</th><th>Staff ID</th><th>Name</th><th>Result</th><th>Note</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="nowrap">{{ r.created_at }}</td>
+        <td class="mono">{{ r.staff_id or '–' }}</td>
+        <td>{{ r.name or '–' }}</td>
+        <td>{% if r.success %}<span class="tag tag-ok">Signed in</span>{% else %}<span class="tag tag-danger">Failed</span>{% endif %}</td>
+        <td>{{ r.note or '' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No sign-ins yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

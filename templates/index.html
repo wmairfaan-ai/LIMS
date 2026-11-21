@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Inventory{% endblock %}
+{% block content %}
+
+<div class="head">
+  <div>
+    <h1>Inventory</h1>
+    <p class="muted">Good {{ 'morning' if now_hour < 12 else 'afternoon' if now_hour < 18 else 'evening' }}, {{ current_user.name.split()[0] }}.</p>
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('export_csv') }}">Export register</a>
+    {% if can_edit() %}<a class="button" href="{{ url_for('add_chemical') }}">+ Add chemical</a>{% endif %}
+  </div>
+</div>
+
+<section class="cards">
+  <div class="card"><span class="num">{{ summary.total }}</span><span>Chemicals</span></div>
+  <div class="card {{ 'card-warn' if summary.low }}"><span class="num">{{ summary.low }}</span><span>Low / out of stock</span></div>
+  <div class="card {{ 'card-danger' if summary.expiry }}"><span class="num">{{ summary.expiry }}</span><span>Expired / expiring</span></div>
+  <div class="card {{ 'card-warn' if summary.sds }}"><span class="num">{{ summary.sds }}</span><span>SDS to update</span></div>
+</section>
+
+{% if conflicts %}
+<section class="panel panel-danger">
+  <h2>⚠️ Storage check: incompatible chemicals together</h2>
+  <ul>
+    {% for c in conflicts %}
+      <li>
+        <strong>{{ c.location }}</strong>:
+        {{ c.a_hazard }} ({{ c.a_names | join(', ') }}) is stored with
+        {{ c.b_hazard }} ({{ c.b_names | join(', ') }}). Move them apart.
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="toolbar">
+  <nav class="seg" aria-label="Filter chemicals">
+    <a class="{{ 'active' if show != 'alerts' }}" href="{{ url_for('index', q=q or None) }}">All chemicals</a>
+    <a class="{{ 'active' if show == 'alerts' }}" href="{{ url_for('index', show='alerts', q=q or None) }}">Needs attention</a>
+  </nav>
+  {% if q %}<span class="muted">Results for “{{ q }}”</span> <a class="link" href="{{ url_for('index', show=show if show == 'alerts' else None) }}">Clear search</a>{% endif %}
+</div>
+
+{% if chemicals %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Chemical</th>
+      <th>CAS No.</th>
+      <th>Hazards</th>
+      <th>Location</th>
+      <th class="right">Quantity</th>
+      <th>Expiry</th>
+      <th>Alerts</th>
+      {% if can_edit() %}<th>Stock</th>{% endif %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in chemicals %}
+      {% set r = c.row %}
+      <tr>
+        <td><a href="{{ url_for('view_chemical', chem_id=r.id) }}"><strong>{{ r.name }}</strong></a>
+          {% if r.formula %}<div class="muted">{{ r.formula }}</div>{% endif %}</td>
+        <td class="mono">{{ r.cas_no or '–' }}</td>
+        <td>{% for h in hazard_list(r) %}<span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span>{% endfor %}</td>
+        <td>{{ r.location or '–' }}</td>
+        <td class="right">{{ r.quantity | qty }} {{ r.unit }}</td>
+        <td class="nowrap">{{ r.expiry_date or '–' }}</td>
+        <td>{% for level, msg in c.alerts %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% else %}<span class="tag tag-ok">OK</span>{% endfor %}</td>
+        {% if can_edit() %}
+        <td class="nowrap">
+          <a class="mini mini-in" href="{{ url_for('stock_page', chemical=r.id, type='IN') }}" title="Stock in {{ r.name }}">+ In</a>
+          <a class="mini mini-out" href="{{ url_for('stock_page', chemical=r.id, type='OUT') }}" title="Stock out {{ r.name }}">− Out</a>
+        </td>
+        {% endif %}
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+  <p class="empty">No chemicals found.{% if can_edit() and not q %} <a href="{{ url_for('add_chemical') }}">Add your first chemical</a>.{% endif %}</p>
+{% endif %}
+
+{% endblock %}

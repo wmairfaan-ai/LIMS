@@ -1,0 +1,6 @@
+# Never upload these to GitHub
+chemicals.db
+.secret_key
+__pycache__/
+*.pyc
+.claude/

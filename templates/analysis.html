@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Analysis{% endblock %}
+{% block content %}
+
+<div class="head">
+  <div>
+    <h1>Data analysis</h1>
+    <p class="muted">Based on stock movements from {{ start }} to today.</p>
+  </div>
+  <nav class="period" aria-label="Analysis period">
+    {% for p in periods %}
+      <a class="{{ 'active' if p == period }}" href="{{ url_for('analysis', period=p) }}">{{ p }} days</a>
+    {% endfor %}
+  </nav>
+</div>
+
+<section class="cards">
+  <div class="card"><span class="num out-num">{{ summary.outs }}</span><span>Stock-outs</span></div>
+  <div class="card"><span class="num in-num">{{ summary.ins }}</span><span>Stock-ins</span></div>
+  <div class="card"><span class="num">{{ summary.active }}</span><span>Chemicals in use</span></div>
+  <div class="card {{ 'card-danger' if summary.reorder }}"><span class="num">{{ summary.reorder }}</span><span>To reorder</span></div>
+  <div class="card {{ 'card-warn' if summary.slow }}"><span class="num">{{ summary.slow }}</span><span>Not used (slow-moving)</span></div>
+</section>
+
+<!-- 1. Forecast -->
+<section class="panel">
+  <h2>Usage forecast & reorder plan</h2>
+  <p class="muted small">
+    Average use over the last {{ period }} days, projected forward. "Order now" means stock runs out
+    within the {{ lead_time }}-day delivery time. Suggested order covers {{ cover_days }} days of use.
+  </p>
+  {% if forecast %}
+  <div class="table-wrap flat">
+  <table>
+    <thead><tr>
+      <th>Chemical</th><th class="right">In stock</th><th class="right">Used</th>
+      <th class="right">Avg / week</th><th class="right">Days left</th><th>Runs out</th>
+      <th class="right">Suggested order</th><th>Status</th>
+    </tr></thead>
+    <tbody>
+      {% for f in forecast %}
+        <tr>
+          <td><a href="{{ url_for('view_chemical', chem_id=f.chem.id) }}">{{ f.chem.name }}</a>
+            <div class="muted">{{ f.count }} stock-out{{ 's' if f.count != 1 }}</div></td>
+          <td class="right">{{ f.chem.quantity | qty }} {{ f.chem.unit }}</td>
+          <td class="right">{{ f.total | qty }} {{ f.chem.unit }}</td>
+          <td class="right">{{ '%.2f' | format(f.per_week) | float | qty }} {{ f.chem.unit }}</td>
+          <td class="right"><strong>{{ f.days_left | round | int if f.days_left is not none else '–' }}</strong></td>
+          <td class="nowrap">{{ f.runout or '–' }}</td>
+          <td class="right">{% if f.suggest > 0 %}{{ '%.2f' | format(f.suggest) | float | qty }} {{ f.chem.unit }}{% else %}–{% endif %}</td>
+          <td><span class="tag tag-{{ f.status[0] }}">{{ f.status[1] }}</span></td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">No stock-outs in this period, so there's nothing to forecast yet.</p>
+  {% endif %}
+</section>
+
+<div class="grid">
+  <!-- 2. Trend -->
+  <section class="panel">
+    <h2>Activity trend ({{ 'per week' if weekly else 'per month' }})</h2>
+    {% if trend %}
+      <div class="chart" role="img" aria-label="Stock in and stock out movements {{ 'per week' if weekly else 'per month' }}">
+        {% for b in trend %}
+          <div class="day" title="{{ b.label }}: {{ b.IN }} in, {{ b.OUT }} out">
+            <div class="pair">
+              <div class="bar bar-in" style="height: {{ (b.IN / trend_max * 100) | round(1) }}%"></div>
+              <div class="bar bar-out" style="height: {{ (b.OUT / trend_max * 100) | round(1) }}%"></div>
+            </div>
+            <span class="day-label">{{ b.label }}</span>
+          </div>
+        {% endfor %}
+      </div>
+      <div class="legend"><span class="key key-in"></span>Stock in <span class="key key-out"></span>Stock out</div>
+    {% else %}
+      <p class="muted">No movements in this period.</p>
+    {% endif %}
+  </section>
+
+  <!-- 3. People -->
+  <section class="panel">
+    <h2>Stock-outs by person</h2>
+    {% for p in people %}
+      <div class="hbar">
+        <span class="hbar-label">{{ p.name }}</span>
+        <div class="hbar-track"><div class="hbar-fill fill-out" style="width: {{ (p.count / people[0].count * 100) | round(1) }}%"></div></div>
+        <span class="hbar-val">{{ p.count }} <small class="muted">· {{ p.chems | length }} chem.</small></span>
+      </div>
+    {% else %}
+      <p class="muted">No stock-outs in this period.</p>
+    {% endfor %}
+
+    <h2 class="mt">Used for</h2>
+    {% for purpose, n in purposes %}
+      <div class="hbar">
+        <span class="hbar-label">{{ purpose }}</span>
+        <div class="hbar-track"><div class="hbar-fill fill-neutral" style="width: {{ (n / purposes[0][1] * 100) | round(1) }}%"></div></div>
+        <span class="hbar-val">{{ n }}</span>
+      </div>
+    {% else %}
+      <p class="muted">No stock-outs in this period.</p>
+    {% endfor %}
+  </section>
+</div>
+
+<div class="grid">
+  <!-- 5. Hazards -->
+  <section class="panel">
+    <h2>Hazard profile <span class="muted">({{ total_chems }} chemicals)</span></h2>
+    {% for h, n in hazards %}
+      <div class="hbar">
+        <span class="hbar-label"><span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span></span>
+        <div class="hbar-track"><div class="hbar-fill fill-neutral" style="width: {{ (n / hazard_max * 100) | round(1) }}%"></div></div>
+        <span class="hbar-val">{{ n }}</span>
+      </div>
+    {% else %}
+      <p class="muted">No hazard classes recorded.</p>
+    {% endfor %}
+  </section>
+
+  <!-- 6. Expiry -->
+  <section class="panel">
+    <h2>Expiry outlook</h2>
+    {% for label, level, items in expiry %}
+      <div class="hbar">
+        <span class="hbar-label">{{ label }}</span>
+        <div class="hbar-track"><div class="hbar-fill fill-{{ level }}" style="width: {{ (items | length / expiry_max * 100) | round(1) }}%"></div></div>
+        <span class="hbar-val">{{ items | length }}</span>
+      </div>
+      {% if items and level == 'danger' %}
+        <div class="hbar-names">{% for c in items %}<a href="{{ url_for('view_chemical', chem_id=c.id) }}">{{ c.name }}</a>{{ ', ' if not loop.last }}{% endfor %}</div>
+      {% endif %}
+    {% endfor %}
+  </section>
+</div>
+
+<div class="grid">
+  <!-- Slow-moving -->
+  <section class="panel">
+    <h2>Slow-moving stock</h2>
+    <p class="muted small">Not used at all in the last {{ period }} days. Check if still needed before reordering, or plan disposal.</p>
+    {% if slow_moving %}
+      <table class="compact">
+        <thead><tr><th>Chemical</th><th class="right">In stock</th><th>Received</th><th>Expiry</th></tr></thead>
+        <tbody>
+          {% for c in slow_moving %}
+            <tr>
+              <td><a href="{{ url_for('view_chemical', chem_id=c.id) }}">{{ c.name }}</a></td>
+              <td class="right">{{ c.quantity | qty }} {{ c.unit }}</td>
+              <td class="nowrap">{{ c.received_date or '–' }}</td>
+              <td class="nowrap">{{ c.expiry_date or '–' }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Every chemical was used in this period.</p>
+    {% endif %}
+  </section>
+
+  <!-- 7. Suppliers -->
+  <section class="panel">
+    <h2>Suppliers</h2>
+    <table class="compact">
+      <thead><tr><th>Supplier</th><th class="right">Chemicals</th><th class="right">Stock-ins ({{ period }} d)</th></tr></thead>
+      <tbody>
+        {% for name, s in suppliers %}
+          <tr><td>{{ name }}</td><td class="right">{{ s.chems }}</td><td class="right">{{ s.restocks }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
