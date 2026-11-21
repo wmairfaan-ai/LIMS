@@ -1,6 +1,9 @@
-# Never upload these to GitHub
+# Never upload these to GitHub: real data, secrets, uploaded files, backups
 chemicals.db
+chemicals.db-journal
 .secret_key
+uploads/
+backups/
 __pycache__/
 *.pyc
 .claude/
