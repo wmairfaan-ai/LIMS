@@ -1,231 +1,183 @@
 # ChemTrack – Chemical Inventory System
 
-A simple web app for keeping a lab's chemical register and tracing every stock movement.
-Built with Python (Flask) and SQLite. Runs on your own computer, with no internet or server needed.
+A web app for managing a lab's chemicals **bottle by bottle**: every container gets its own
+**QR label**, location, owner and full life cycle (received → used → moved → disposed), with
+Malaysian compliance records built in.
 
-## Features
+Built with Python (Flask), SQLite and waitress. Runs on your own computer, with no internet needed.
 
-### Staff accounts and sign in
-Every page is locked until you sign in with your **Staff ID and password**.
+The design follows a comparison of university chemical systems in 6 Asian countries
+(NUS LMMS, CityU CCS, HKUST, CUHK, HKU, Kyoto KUCRS, U Tokyo UTCIMS, KAIST, NTU Taiwan, UTM/UKM/USM):
+**one record per container, QR/barcode identity, proper locations with legal limits,
+life-cycle tracking, stocktakes, and local-law reports.**
+
+---
+
+## How it's organised
+
+| Idea | What it means in ChemTrack |
+|---|---|
+| **Chemical (substance)** | *What* it is: name, CAS No., GHS hazards, unit, reorder level, regulatory flags, SDS |
+| **Container** | *A physical bottle/bag* with its own code (`CT-00042`) and QR label: size, amount left, lot, supplier, expiry, location, status |
+| **Location** | Room › storage unit (e.g. *Lab 1 › Flammable cabinet A*), storage type, flammable limit |
+| **Movement** | Everything that happens to a container: Received, Used, Moved, Corrected, Disposed, Stocktake |
+
+A chemical's stock = the total of its active containers.
+
+## Daily use
+
+| Task | Where |
+|---|---|
+| **New bottles arrive** | **Inventory › Receive containers**: choose the chemical, size, how many, location, lot, expiry → **print the QR labels** and stick them on |
+| **Use some** | Scan the bottle's QR with a phone → **Use**. Or the green **Stock in / out** button → scan / type the code → amount |
+| **Move a bottle** | Container page → **Move** |
+| **Weighed it and the amount is different** | Container page → **Correct amount** (reason required) |
+| **Empty or expired** | Container page → **Dispose** (+ scheduled waste record with SW code) |
+| **Typed the wrong amount** | **Edit** next to the "Used" entry: later balances recalculate automatically |
+| **Find a bottle** | Type or scan its `CT-` code in the top search box |
+
+## Pages
+
+- **Inventory**: chemicals with totals, containers, locations and alerts (low stock, expiry, SDS, missing, empty to dispose); storage problems (incompatible chemicals together, flammable limit exceeded)
+- **Chemical page**: details, regulatory flags, **SDS PDF** (upload / open), all its containers with fill gauges, recent activity
+- **Container page** (where the QR leads): amount left, location, lot, dates, **QR code**, actions (use, move, correct, dispose), history, print label
+- **Locations**: rooms and storage units, storage types, **flammable litres vs limit**, incompatible storage warnings, **🚨 printable emergency list** per room (for Bomba / lab door), start a **stocktake**
+- **Movements**: every movement with filters (date, type, chemical, search), charts, most used chemicals, CSV export
+- **Compliance** (one page for audits):
+  - **USECHH 2000**: Chemical Inventory (CI) and Chemical Register (CR, hazardous to health): printable and CSV
+  - **CLASS 2013**: chemicals in use without an SDS, or with an SDS over 5 years old
+  - **CHRA** records with review due dates (default 5 years after assessment)
+  - **Fire Services Act 1988**: flammable litres per location vs your permit / cabinet limit
+  - **Poisons Act 1952 / precursors**: flagged chemicals and their stock
+  - **Scheduled Wastes Regulations 2005**: waste log with SW codes, contractor, consignment note
+  - **Stocktake**: scan every container in a location; unscanned ones are marked **missing**
+- **Analysis**: usage forecast and reorder plan, trends, uses by person / purpose, hazard profile, expiry outlook, slow-moving stock, suppliers
+- **Staff** (admin): accounts, roles, sign-in log, **audit log** (who changed what, when)
+
+## Roles
 
 | Action | Admin | Staff | Viewer |
 |---|:-:|:-:|:-:|
-| View inventory, movements and analysis; export CSV | ✓ | ✓ | ✓ |
-| Record stock in / out | ✓ | ✓ | – |
-| Add and edit chemicals | ✓ | ✓ | – |
-| Edit or delete **own** movements (same day) | ✓ | ✓ | – |
-| Edit or delete **any** movement | ✓ | – | – |
-| Delete chemicals; manage staff accounts; view sign-in log | ✓ | – | – |
+| View everything, print labels and reports, export CSV | ✓ | ✓ | ✓ |
+| Receive, use, move, correct, dispose containers | ✓ | ✓ | – |
+| Add / edit chemicals, upload SDS, waste records, stocktakes | ✓ | ✓ | – |
+| Correct own "used" entries (same day) | ✓ | ✓ | – |
+| Correct any entry | ✓ | – | – |
+| Locations and limits, CHRA records, delete chemicals | ✓ | – | – |
+| Staff accounts, sign-in log, audit log | ✓ | – | – |
 
-- **First run**: ChemTrack asks you to create the first **admin** account
-- **Adding staff** (Staff page): the admin enters the Staff ID, name and role. ChemTrack creates a
-  temporary password, shown **once**, to hand over in person. Staff must choose their own password at first sign-in
-- **Forgotten password**: the admin clicks **Reset password** on the Staff page
-- **Staff who leave** are **disabled**, not deleted, so their stock history stays traceable
-- **Your name is filled in automatically** on every stock movement. Nobody can record under someone else's name.
-  Corrections show who edited them and when
-- **Account menu** (your initials, top right): your role, change password, staff accounts, sign-in log, sign out
+## Security
+- Sign in with Staff ID + password; passwords stored only as secure hashes
+- 5 wrong passwords → locked 5 minutes; every attempt in the sign-in log
+- Automatic sign-out after 8 hours; password changes sign out old sessions
+- CSRF protection on every form; SDS uploads must be real PDFs and are saved under ChemTrack's own file names
+- **Audit log** of every change; movement corrections are marked *edited* with who and when
 
-**Security built in**
-- Passwords are stored only as secure hashes (scrypt), never as text
-- 5 wrong passwords lock the account for 5 minutes; every attempt is in the **Sign-in log**
-- Automatic sign-out after 8 hours; changing or resetting a password signs out old sessions
-- Every form carries a hidden security token (CSRF protection), so other websites can't submit forms in ChemTrack
-- A random secret key is created on first run and kept in `.secret_key`
-
-### Top bar
-Inventory · Movements · Analysis · Staff (admin) tabs, a **search box** on every page,
-the **Stock in / out** button, a **bell** showing how many chemicals need attention, and your account menu.
-
-### Inventory (home page)
-- **Chemical register**: name, CAS No., formula, GHS hazard classes, location, supplier, lot No., received / expiry / SDS dates
-- **Summary cards**: total chemicals, low or out of stock, expired or expiring, SDS to update
-- **Alerts** on each chemical:
-  - Low stock (at or below the reorder level) or out of stock
-  - Expired, or expiring within 30 days
-  - SDS date missing, or SDS older than 5 years
-- **Storage check**: warns when incompatible chemicals share a location
-  (flammable + oxidiser, explosive + flammable, explosive + oxidiser)
-- **Search** (top bar) by name, CAS No. or location; **All chemicals / Needs attention** filter
-- **Quick + In / − Out buttons** on every row, which open the Stock in / out page for that chemical
-- **+ Add chemical** and **Export register** buttons at the top
-- **Export register**: chemical register as CSV (opens in Excel), useful for
-  USECHH 2000 / CLASS 2013 chemical register records
-
-### Stock in / out page (green button in the top bar)
-The main place to key in stock movements:
-1. Choose **Stock out** (used / taken) or **Stock in** (received / restocked)
-2. Choose the chemical (the list shows the current stock of each one)
-3. Enter the amount, the purpose and the PO / DO / invoice No. (your name is added automatically)
-4. Click **Save movement**
-
-- Prevents taking out more than is in stock
-- After saving, the type stays selected, so you can key in many movements quickly
-- Shows the last 10 movements with an **Edit** link where you're allowed to edit
-
-### Editing or deleting a movement
-Keyed in the wrong amount? Click **Edit** next to the movement (on the Stock in / out page,
-the Stock movements dashboard or a chemical's history). Staff can fix their own movements on
-the same day; admins can fix any movement:
-- Change the type, amount, purpose or reference
-- If the amount or type changes, the chemical's stock and the **balance of every later movement
-  are recalculated automatically**
-- Changes that would make the stock negative at any point are refused
-- Corrected movements are marked **edited** (with who and when) so corrections stay visible
-- **Delete movement** removes it and recalculates the stock
-
-### Chemical page
-- All details, alerts and the chemical ID (e.g. `CH-0002`)
-- Stock in / out form for that chemical
-- Full history for that chemical, with the balance after each movement and Edit links
-
-### Stock movements dashboard
-- Every stock in and out across all chemicals, with:
-  movement ID (`TX-00027`), date & time, type, chemical ID, quantity, **balance after**,
-  supplier, lot No., reference, name and purpose
-- **Filters**: date range (last 30 days by default), stock in or out only, one chemical,
-  or search by supplier, name, PO No. or purpose
-- **Summary**: number of stock-ins, stock-outs, chemicals moved and people involved
-- **Movements per day** chart and the **5 most used chemicals**
-- **Export CSV** of exactly what the filters show (e.g. for a monthly usage report)
-
-### Data analysis page
-Choose a period (30, 90, 180 or 365 days) to analyse:
-- **Summary**: stock-outs, stock-ins, chemicals in use, chemicals to reorder, slow-moving chemicals
-- **Usage forecast & reorder plan**: for each chemical in use, the amount used, average use per week,
-  **days of stock left**, the **date it will run out**, and a **suggested order quantity**
-  - *Order now*: runs out within the delivery lead time (14 days)
-  - *Order soon*: runs out within lead time + 30 days
-  - Suggested order = enough for 60 days of use, minus what is in stock
-- **Activity trend**: stock in vs stock out per week (30 / 90 days) or per month (180 / 365 days)
-- **Stock-outs by person**, and **what chemicals are used for** (by purpose)
-- **Hazard profile**: how many chemicals fall under each GHS hazard class
-- **Expiry outlook**: expired, within 30 days, 31–90, 91–180, over 180 days, no date
-- **Slow-moving stock**: chemicals not used at all in the period (check before reordering, or plan disposal)
-- **Suppliers**: number of chemicals and stock-ins per supplier
-
-The forecast uses a simple average, so it works best with a few weeks of real stock-out records.
+---
 
 ## How to run (Windows)
 
-Run these in PowerShell inside the project folder (the one containing `app.py`):
+In PowerShell, inside this folder:
 
 ```powershell
 pip install -r requirements.txt
 ```
-Installs Flask. Only needed once per computer.
+Installs Flask, waitress and qrcode. Once per computer.
 
 ```powershell
-python seed.py
+python serve.py
 ```
-Optional: loads 11 sample chemicals with about 3 weeks of stock history.
-**Warning: this erases all chemicals and stock movements** (staff accounts are kept).
+Starts ChemTrack on the **production server (waitress)** with **automatic daily backups**.
+Or just double-click **`start_chemtrack.bat`**. Open **http://127.0.0.1:5000**. Ctrl+C (or close the window) to stop.
 
-```powershell
-python app.py
-```
-Starts the app. Open **http://127.0.0.1:5000** in your browser.
-The first time, create your admin account. Press **Ctrl+C** in the terminal to stop it.
+The first time, create your admin account, then add **locations**, then **chemicals**, then **receive containers**.
 
-**While changing the code**, start it in debug mode so it reloads automatically:
+**While changing the code**, use Flask's development server with auto-reload instead:
 ```powershell
 $env:CHEMTRACK_DEBUG = "1"; python app.py
 ```
 Never use debug mode when others can reach the app. Its error page can run code.
 
+**Sample data** to explore (erases all inventory data, keeps accounts, saves a backup first):
+```powershell
+python seed.py
+```
+
+## Backups and upgrades
+- `python serve.py` saves a backup **at start and every 24 hours** into `backups/`, keeping the newest 30.
+  Backups use SQLite's safe online copy, so they're consistent even while people are working.
+- Back up any time: `python backup.py`
+- **Restore**: stop ChemTrack → copy a file from `backups/` over `chemicals.db` → start again.
+- **Database upgrades are automatic and versioned** (`chemtrack/db.py`). Before any upgrade a
+  `before-upgrade` backup is saved. Old data from the first ChemTrack version was converted:
+  each chemical became one substance + one container (`CT-` + its old number), all history kept,
+  and the original tables kept as `legacy_chemicals` / `legacy_transactions`.
+- This folder is in OneDrive, so backups are also synced to the cloud.
+
+## Automated tests
+```powershell
+python -m unittest discover -s tests -v
+```
+19 checks (security, receiving, labels, use/over-use, scanning, moving, correcting with
+recalculation, disposal + waste, SDS upload safety, stocktake, registers, CHRA dates, roles,
+audit log, every page, and conversion of an old database). They use a temporary database.
+Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.
+
 ## Who can open it?
+`127.0.0.1` (**localhost**) means *this computer only*. `:5000` is the port.
+To share on the office network later (stage 3 of the deployment roadmap): get **IT approval**, put
+**HTTPS** in front (e.g. Caddy), then set:
 
-`127.0.0.1` (also called **localhost**) always means *this same computer*, so only you can
-open the app. Other people typing that address would reach their own computer, not yours.
-`:5000` is the **port** the app listens on.
+| Variable | Meaning |
+|---|---|
+| `CHEMTRACK_HOST=0.0.0.0` | Accept connections from other computers |
+| `CHEMTRACK_HTTPS=1` | Sign-in cookie only sent over HTTPS (turn on only once HTTPS works) |
+| `CHEMTRACK_BEHIND_PROXY=1` | Trust the HTTPS proxy's headers (real user addresses in logs) |
+| `CHEMTRACK_BASE_URL=https://chemtrack.lab.local` | Address printed inside QR labels |
 
-To share it with colleagues on the same network, the app would need to run on `0.0.0.0`
-and they would open your computer's local IP address (e.g. `http://192.168.1.25:5000`).
-Sign-in now protects the data, but before sharing also: keep debug mode **off**, get
-approval from your IT department, and use a proper server (e.g. `waitress`) instead of
-Flask's built-in development server.
-
-## IDs used in the app
-
-| ID | Meaning | Example |
-|---|---|---|
-| `CH-0001` | Chemical ID | `CH-0002` = Acetone |
-| `TX-00001` | Stock movement (transaction) ID | `TX-00027` = one stock in or out |
+QR labels open the container page on a phone **once ChemTrack is reachable from that phone**
+(after stage 3). Until then, scan with a USB/Bluetooth QR scanner into the search box, or type the code.
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `app.py` | The web app: database setup, sign in and roles, alert rules, storage check, all pages and CSV exports |
-| `seed.py` | Loads sample data for a demo (erases chemicals and movements) |
-| `reset_password.py` | Emergency password reset from the computer itself |
-| `templates/base.html` | Page layout and top bar |
-| `templates/login.html` | Sign-in page |
-| `templates/setup.html` | First-run "create admin account" page |
-| `templates/change_password.html` | Change password (also forced at first sign-in) |
-| `templates/staff.html` | Staff accounts (admin) |
-| `templates/login_log.html` | Sign-in log (admin) |
-| `templates/error.html` | "Not allowed" / "Not found" pages |
-| `templates/index.html` | Inventory home page |
-| `templates/form.html` | Add / edit chemical form |
-| `templates/detail.html` | Chemical page with stock in / out and history |
-| `templates/stock.html` | Stock in / out page |
-| `templates/movement_form.html` | Edit or delete a stock movement |
-| `templates/movements.html` | Stock movements dashboard |
-| `templates/analysis.html` | Data analysis page |
-| `static/style.css` | Styling |
-| `requirements.txt` | Python libraries needed (Flask) |
-| `chemicals.db` | Your data, created automatically. **Back up this file** to keep your records |
-| `.secret_key` | Random key that protects sign-in cookies. Created automatically. **Keep it private** |
-| `.gitignore` | Stops `chemicals.db` and `.secret_key` being uploaded if you put the code on GitHub |
+| `serve.py` | Start ChemTrack (waitress + daily backups). **Use this normally** |
+| `start_chemtrack.bat` | Double-click to start |
+| `app.py` | Start the development server (for code changes) |
+| `backup.py`, `seed.py`, `reset_password.py` | Manual backup · sample data · emergency admin password reset |
+| `chemtrack/config.py` | **Settings** (limits, alert days, units, storage types, …) |
+| `chemtrack/db.py` | Database structure and versioned migrations |
+| `chemtrack/logic.py` | Rules: alerts, storage checks, flammable totals (no web code) |
+| `chemtrack/security.py` | Sign-in checks, roles, CSRF, audit log |
+| `chemtrack/backup.py`, `chemtrack/qr.py` | Backups · QR codes |
+| `chemtrack/views/` | Pages: `auth`, `inventory`, `locations`, `compliance`, `reports` |
+| `templates/`, `static/style.css` | Page layouts and styling |
+| `tests/` | Automated tests |
+| `chemicals.db`, `.secret_key`, `uploads/`, `backups/` | Your data, secret key, SDS files, backups. **Not in git. Keep private** |
 
-## Database
-
-Four tables in `chemicals.db` (SQLite):
-
-- **chemicals**: one row per chemical (identity, hazards, location, current quantity, reorder level, supplier, dates)
-- **transactions**: one row per stock in or out (amount, balance after, who recorded it, purpose, reference,
-  date & time, and who last edited it and when)
-- **users**: staff accounts (Staff ID, name, role, password hash, active, lockout, last sign-in)
-- **login_log**: every sign-in attempt, successful or failed
-
-The current quantity is only changed through stock in / out (or by editing a movement),
-so every change is traced.
-Older databases are upgraded automatically when the app starts.
-
-## Settings you can change (top of `app.py`)
-
-| Setting | Default | Meaning |
-|---|---|---|
-| `EXPIRY_WARNING_DAYS` | `30` | Warn this many days before expiry |
-| `SDS_MAX_AGE_DAYS` | `5 * 365` | Flag SDS older than this |
-| `LEAD_TIME_DAYS` | `14` | Days from ordering to receiving stock (for "Order now") |
-| `COVER_DAYS` | `60` | Suggested orders should last this many days |
-| `INCOMPATIBLE_PAIRS` | flammable / oxidiser / explosive | Hazard pairs that must not share a location |
-| `UNITS` | g, kg, mL, L, pcs | Units in the dropdown |
-| `MAX_FAILED_LOGINS` | `5` | Wrong passwords before the account locks |
-| `LOCKOUT_MINUTES` | `5` | How long a locked account stays locked |
-| `SESSION_HOURS` | `8` | Automatic sign-out after this many hours |
-| `MIN_PASSWORD_LENGTH` | `8` | Shortest password allowed |
+## Settings you can change (`chemtrack/config.py`)
+`EXPIRY_WARNING_DAYS` (30) · `SDS_MAX_AGE_DAYS` (5 years) · `CHRA_REVIEW_YEARS` (5) · `CHRA_WARNING_DAYS` (90) ·
+`STOCKTAKE_WARNING_DAYS` (365) · `LEAD_TIME_DAYS` (14) · `COVER_DAYS` (60) · `INCOMPATIBLE_PAIRS` ·
+`STORAGE_TYPES` · `UNITS` · `BACKUP_KEEP` (30) · `MAX_FAILED_LOGINS` (5) · `LOCKOUT_MINUTES` (5) ·
+`SESSION_HOURS` (8) · `MIN_PASSWORD_LENGTH` (8) · `MAX_SDS_MB` (10)
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `ModuleNotFoundError: No module named 'flask'` | Run `pip install -r requirements.txt` |
-| `Address already in use` / port 5000 busy | Another copy is running. Stop it with Ctrl+C, or close its terminal |
-| Page shows old data or no changes | Refresh the browser (Ctrl+F5) |
-| Changes to the code don't show up | Stop the app with Ctrl+C and run `python app.py` again (or use debug mode while developing) |
-| A staff member forgot their password | Admin: Staff page → **Reset password**, then hand over the temporary password |
-| **The admin** forgot their password, or is locked out | On the computer running ChemTrack: `python reset_password.py <Staff ID>` prints a temporary password |
-| "This form expired" | The page was open too long or you signed out in another tab. Refresh and try again |
-| "Not allowed" page | Your role can't do that. Ask an admin to change your role on the Staff page |
-| Want a fresh start | Stop the app and run `python seed.py`, or delete `chemicals.db` for an empty database (this also removes all accounts) |
+| `No module named 'waitress'` / `'qrcode'` / `'flask'` | `pip install -r requirements.txt` |
+| Port 5000 busy | Another copy is running. Close it, or press Ctrl+C in its window |
+| Changes to the code don't show | Restart ChemTrack (waitress doesn't reload code) |
+| Staff forgot password | Admin: Staff page → **Reset password** |
+| Admin forgot password | `python reset_password.py <Staff ID>` on this computer |
+| "This form expired" | Refresh the page and try again |
+| A container shows **Missing** | It wasn't scanned in a stocktake. Scan it in the next stocktake, or use **Correct amount** when found |
+| Something went wrong after an update | Restore the newest `before-upgrade` backup (see Backups) |
 
-## Ideas for next versions
-- QR code labels for each bottle (`qrcode` library): scan to open stock in / out
-- Upload and attach SDS PDF files
-- Email reminders for low stock and expiring chemicals
-- Monthly usage report as PDF
-- Waste disposal log (scheduled waste SW codes)
-- Run with `waitress` for sharing on the office network
+## Next steps (deployment roadmap)
+1. ✅ App ready: sign-in, roles, audit log, waitress, backups, tests
+2. Choose hosting with Taylor's IT (lab PC, university server, or cloud)
+3. HTTPS + firewall + friendly address → phones can open QR labels
+4. Run as a Windows service (starts with the PC)
+5. Pilot in the lab, train staff, go live
