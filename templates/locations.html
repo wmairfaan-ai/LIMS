@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Locations{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Storage locations</h1>
+    <p class="muted">Rooms and storage units. Set a flammable limit (litres) to match your Bomba permit or cabinet rating.</p>
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('emergency') }}" target="_blank" rel="noopener">🚨 Emergency list (print)</a>
+    <a class="button secondary" href="{{ url_for('stocktake_list') }}">Stocktake</a>
+  </div>
+</div>
+
+<div class="grid {{ 'staff-grid' if is_admin() }}">
+  {% if is_admin() %}
+  <section class="panel">
+    <h2>Add location</h2>
+    <form class="form" method="post">
+      {{ csrf_field() }}
+      <label>Room / lab * <input name="room" required placeholder="Lab 1"></label>
+      <label>Storage unit <input name="unit_name" placeholder="Flammable cabinet A"></label>
+      <label>Storage type
+        <select name="storage_type">{% for t in config.STORAGE_TYPES %}<option>{{ t }}</option>{% endfor %}</select></label>
+      <label>Flammable limit (L) <input name="flammable_limit_l" type="number" step="any" min="0" placeholder="Leave empty if none"></label>
+      <button type="submit">Add location</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2>Locations <span class="muted">({{ rows | length }})</span></h2>
+    {% if rows %}
+    <div class="table-wrap flat">
+    <table>
+      <thead><tr><th>Location</th><th>Type</th><th class="right">Containers</th><th>Flammable liquids</th><th></th></tr></thead>
+      <tbody>
+        {% for l in rows %}{% set f = flam.get(l.id) %}
+          <tr class="{{ 'row-muted' if not l.active }}">
+            <td><a href="{{ url_for('location_view', lid=l.id) }}"><strong>{{ location_label(l) }}</strong></a>
+              {% if not l.active %}<span class="tag tag-muted">Closed</span>{% endif %}
+              {% if l.id in conflicts %}<span class="tag tag-danger">Incompatible storage</span>{% endif %}</td>
+            <td>{{ l.storage_type }}</td>
+            <td class="right">{{ counts.get(l.id, 0) }}</td>
+            <td class="nowrap">
+              {% if f and (f.litres or f.limit) %}
+                {{ f.litres | qty }} L{% if f.limit is not none %} / {{ f.limit | qty }} L
+                  <div class="fill {{ 'fill-over' if f.over }}"><span style="width: {{ f.pct }}%"></span></div>{% endif %}
+                {% if f.over %}<span class="tag tag-danger">Over limit</span>{% endif %}
+              {% else %}–{% endif %}
+            </td>
+            <td>{% if is_admin() %}<a href="{{ url_for('location_edit', lid=l.id) }}">Edit</a>{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<p class="muted">No locations yet.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

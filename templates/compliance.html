@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Compliance{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Compliance</h1>
+    <p class="muted">USECHH 2000, CLASS 2013, Fire Services Act 1988 and Scheduled Wastes Regulations 2005 records, in one place.</p>
+  </div>
+  {% if is_admin() %}<a class="button secondary" href="{{ url_for('audit_log') }}">Audit log</a>{% endif %}
+</div>
+
+<div class="comp-grid">
+  <section class="panel">
+    <h2>📋 USECHH chemical inventory and register</h2>
+    <p><strong>{{ n_ci }}</strong> chemicals in use (Chemical Inventory)<br>
+       <strong>{{ n_cr }}</strong> hazardous to health (Chemical Register)</p>
+    <div class="actions wrap">
+      <a class="button secondary" href="{{ url_for('register_report', kind='CI') }}">View inventory</a>
+      <a class="button secondary" href="{{ url_for('register_report', kind='CR') }}">View register</a>
+    </div>
+  </section>
+
+  <section class="panel {{ 'panel-warn' if no_sds or old_sds }}">
+    <h2>📄 Safety data sheets (CLASS 2013)</h2>
+    {% if not no_sds and not old_sds %}<p class="text-ok">Every chemical in use has an SDS uploaded.</p>{% endif %}
+    {% if no_sds %}<p><strong>{{ no_sds | length }}</strong> without an uploaded SDS:</p>
+      <p class="small-text">{% for i in no_sds[:12] %}<a href="{{ url_for('substance_view', sid=i.s.id) }}">{{ i.s.name }}</a>{{ ', ' if not loop.last }}{% endfor %}{% if no_sds | length > 12 %}…{% endif %}</p>{% endif %}
+    {% if old_sds %}<p><strong>{{ old_sds | length }}</strong> with an SDS over 5 years old.</p>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>🩺 Chemical health risk assessment (CHRA)</h2>
+    {% for a, st in chra %}
+      <div class="row-line"><span>{{ a.title }}<span class="muted"> · {{ a.assessor or 'assessor not set' }}</span></span>
+        <span><span class="tag tag-{{ st[0] }}">{{ st[1] }}</span>{% if is_admin() %} <a href="{{ url_for('chra_form', aid=a.id) }}">Edit</a>{% endif %}</span></div>
+    {% else %}
+      <p class="text-warn">No CHRA recorded. USECHH 2000 requires an assessment by a DOSH-registered assessor, reviewed at least every 5 years.</p>
+    {% endfor %}
+    {% if is_admin() %}<a class="button secondary" href="{{ url_for('chra_form') }}">+ Record CHRA</a>{% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>🔥 Flammable liquids per location</h2>
+    {% set shown = flam | selectattr('litres') | list %}
+    {% for f in shown %}
+      <div class="row-line"><a href="{{ url_for('location_view', lid=f.loc.id) }}">{{ location_label(f.loc) }}</a>
+        <span>{{ f.litres | qty }} L{% if f.limit is not none %} / {{ f.limit | qty }} L{% endif %}
+          {% if f.over %}<span class="tag tag-danger">Over</span>{% elif f.limit is none %}<span class="tag tag-muted">No limit set</span>{% endif %}</span></div>
+    {% else %}<p class="muted">No flammable liquids in stock.</p>{% endfor %}
+  </section>
+
+  <section class="panel">
+    <h2>☠️ Poisons and controlled chemicals</h2>
+    {% for i in controlled %}
+      <div class="row-line"><a href="{{ url_for('substance_view', sid=i.s.id) }}">{{ i.s.name }}</a>
+        <span>{{ i.total | qty }} {{ i.s.unit }} {% if i.s.is_poison %}<span class="flag flag-red">Poison</span>{% endif %}{% if i.s.is_precursor %}<span class="flag flag-red">Precursor</span>{% endif %}</span></div>
+    {% else %}<p class="muted">None flagged.</p>{% endfor %}
+    <p class="small-text muted">Every use is recorded with name, date and amount. Export it from Movements.</p>
+  </section>
+
+  <section class="panel">
+    <h2>♻️ Scheduled waste</h2>
+    {% if empties %}<p class="text-warn"><strong>{{ empties | length }}</strong> empty container(s) waiting for disposal:
+      {% for e in empties[:8] %}<a class="mono" href="{{ url_for('container_view', code=e.code) }}">{{ e.code }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+    {% for w in waste %}
+      <div class="row-line"><span>{{ w.disposed_date }} · {{ w.description }}</span><span class="mono">{{ w.sw_code }}</span></div>
+    {% else %}<p class="muted">No waste records yet.</p>{% endfor %}
+    <a class="button secondary" href="{{ url_for('waste') }}">Waste log</a>
+  </section>
+
+  <section class="panel">
+    <h2>🔍 Stocktake</h2>
+    {% if stocktake %}<p>Last finished: {{ stocktake.finished_at[:10] }}</p>{% else %}<p class="text-warn">No stocktake done yet.</p>{% endif %}
+    <p class="small-text muted">Scan every container in a location. Anything not found is marked missing.</p>
+    <a class="button secondary" href="{{ url_for('stocktake_list') }}">Stocktakes</a>
+  </section>
+</div>
+{% endblock %}

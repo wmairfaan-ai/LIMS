@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Receive containers{% endblock %}
+{% block content %}
+<h1>Receive containers</h1>
+<p class="muted">Register bottles that just arrived. Each one gets its own QR label. Chemical not listed?
+  {% if can_edit() %}<a href="{{ url_for('substance_new') }}">Add the chemical first</a>.{% endif %}</p>
+
+{% if not locations %}
+  <div class="flash flash-warn">No storage locations yet. {% if is_admin() %}<a href="{{ url_for('locations') }}">Add one first</a>.{% else %}Ask an admin to add them.{% endif %}</div>
+{% endif %}
+
+<form class="form" method="post">
+  {{ csrf_field() }}
+  <fieldset>
+    <legend>What arrived</legend>
+    <label>Chemical *
+      <select name="substance_id" required>
+        <option value="">Choose…</option>
+        {% for s in subs %}<option value="{{ s.id }}" data-unit="{{ s.unit }}" {{ 'selected' if (form.substance_id or selected) == s.id|string }}>{{ s.name }}{% if s.cas_no %} ({{ s.cas_no }}){% endif %} · {{ s.unit }}</option>{% endfor %}
+      </select>
+    </label>
+    <div class="row">
+      <label>Size of each container *
+        <input name="size" type="number" step="any" min="0" required value="{{ form.size or '' }}" placeholder="2.5">
+        <small>In the chemical's unit (shown in the list above).</small>
+      </label>
+      <label>Number of containers *
+        <input name="count" type="number" min="1" max="50" value="{{ form.count or 1 }}" required>
+      </label>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>Details</legend>
+    <label>Store in *
+      <select name="location_id" required>
+        <option value="">Choose…</option>
+        {% for l in locations %}<option value="{{ l.id }}" {{ 'selected' if form.location_id == l.id|string }}>{{ location_label(l) }} ({{ l.storage_type }})</option>{% endfor %}
+      </select>
+    </label>
+    <div class="row">
+      <label>Supplier <input name="supplier" value="{{ form.supplier or '' }}"></label>
+      <label>Lot / batch No. <input name="lot_no" value="{{ form.lot_no or '' }}"></label>
+      <label>PO / DO No. <input name="reference" value="{{ form.reference or '' }}"></label>
+    </div>
+    <div class="row">
+      <label>Received <input type="date" name="received_date" value="{{ form.received_date or today }}"></label>
+      <label>Expiry <input type="date" name="expiry_date" value="{{ form.expiry_date or '' }}"></label>
+    </div>
+  </fieldset>
+  <div class="actions">
+    <button type="submit">Receive and print labels</button>
+    <a class="link" href="{{ url_for('index') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

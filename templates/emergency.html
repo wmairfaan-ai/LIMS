@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emergency chemical list · ChemTrack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="print-page">
+  <div class="no-print label-bar">
+    <strong>Emergency chemical list</strong>
+    <span class="muted">Keep a printed copy at the lab entrance and update it monthly.</span>
+    <button onclick="window.print()">🖨️ Print</button>
+    <a class="link" href="{{ url_for('locations') }}">Back</a>
+  </div>
+  <h1>Chemicals stored: emergency information</h1>
+  <p>Printed {{ today }} from ChemTrack. In an emergency call <strong>999</strong>. Fire and Rescue (Bomba): <strong>994</strong>.</p>
+  {% for sec in sections %}
+    <section class="print-section">
+      <h2>{{ location_label(sec.loc) }} <span class="muted">({{ sec.loc.storage_type }})</span></h2>
+      {% if sec.flam and sec.flam.litres %}<p><strong>Flammable liquids: {{ sec.flam.litres | qty }} L</strong>{% if sec.flam.limit is not none %} (limit {{ sec.flam.limit | qty }} L){% endif %}</p>{% endif %}
+      <table class="print-table">
+        <thead><tr><th>Chemical</th><th>CAS No.</th><th>Hazards</th><th>Amount</th><th>Containers</th></tr></thead>
+        <tbody>
+          {% for name, group in sec.containers | groupby('name') %}
+            <tr>
+              <td><strong>{{ name }}</strong>{% if group[0].is_poison %} (POISON){% endif %}</td>
+              <td>{{ group[0].cas_no or '–' }}</td>
+              <td>{{ hazard_list(group[0]) | join(', ') or '–' }}</td>
+              <td>{{ group | sum(attribute='amount') | qty }} {{ group[0].unit }}</td>
+              <td>{{ group | length }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% else %}
+    <p>No chemicals stored.</p>
+  {% endfor %}
+</body>
+</html>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Edit location{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1>Edit location</h1>
+  <form class="form panel" method="post">
+    {{ csrf_field() }}
+    <label>Room / lab * <input name="room" required value="{{ loc.room or '' }}"></label>
+    <label>Storage unit <input name="unit_name" value="{{ loc.unit_name or '' }}"></label>
+    <label>Storage type
+      <select name="storage_type">{% for t in config.STORAGE_TYPES %}<option {{ 'selected' if loc.storage_type == t }}>{{ t }}</option>{% endfor %}</select></label>
+    <label>Flammable limit (L)
+      <input name="flammable_limit_l" type="number" step="any" min="0" value="{{ loc.flammable_limit_l if loc.flammable_limit_l is not none else '' }}">
+      <small>From your Bomba permit or the cabinet's rated capacity. Leave empty if none.</small></label>
+    <label>Notes <textarea name="notes" rows="2">{{ loc.notes or '' }}</textarea></label>
+    <label class="check"><input type="checkbox" name="active" value="1" {{ 'checked' if loc.active }}> In use (untick to close this location)</label>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <a class="link" href="{{ url_for('location_view', lid=loc.id) }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

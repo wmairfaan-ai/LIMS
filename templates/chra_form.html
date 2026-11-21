@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}CHRA{% endblock %}
+{% block content %}
+<div class="narrow">
+  <h1>{{ 'Edit' if a.id else 'Record' }} chemical health risk assessment</h1>
+  <p class="muted">Keep track of CHRA reports and their review dates. If you leave the review date empty,
+    it's set to {{ config.CHRA_REVIEW_YEARS }} years after the assessment.</p>
+  <form class="form panel" method="post">
+    {{ csrf_field() }}
+    <label>What it covers * <input name="title" required value="{{ a.title or '' }}" placeholder="Lab 1 – teaching laboratory (all chemicals)"></label>
+    <label>Assessor (DOSH-registered) <input name="assessor" value="{{ a.assessor or '' }}"></label>
+    <div class="row">
+      <label>Assessment date * <input type="date" name="assessment_date" required value="{{ a.assessment_date or '' }}"></label>
+      <label>Next review <input type="date" name="next_review" value="{{ a.next_review or '' }}"></label>
+    </div>
+    <label>Report reference <input name="report_ref" value="{{ a.report_ref or '' }}"></label>
+    <label>Notes <textarea name="notes" rows="2">{{ a.notes or '' }}</textarea></label>
+    <div class="actions"><button type="submit">Save</button><a class="link" href="{{ url_for('compliance') }}">Cancel</a></div>
+  </form>
+</div>
+{% endblock %}

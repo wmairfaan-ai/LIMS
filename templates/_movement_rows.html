@@ -1,0 +1,30 @@
+{# Shared movement history table. Expects `log` rows with code (optional), unit from `unit_for` or s.unit #}
+{% set unit = unit if unit is defined else (s.unit if s is defined else '') %}
+{% if log %}
+<div class="table-wrap flat">
+<table class="compact">
+  <thead><tr><th>ID</th><th>When</th>{% if log[0].code is defined and log[0].code %}<th>Container</th>{% endif %}<th>What</th>
+    <th class="right">Change</th><th class="right">Left</th><th>Who</th><th>Purpose / reference</th><th></th></tr></thead>
+  <tbody>
+    {% for m in log %}
+      <tr>
+        <td class="mono">{{ m.id | tx_code }}</td>
+        <td class="nowrap">{{ m.created_at[:16] }}</td>
+        {% if m.code is defined and m.code %}<td class="mono"><a href="{{ url_for('container_view', code=m.code) }}">{{ m.code }}</a></td>{% endif %}
+        <td><span class="mv mv-{{ m.type | lower }}">{{ TYPE_LABELS[m.type] }}</span></td>
+        <td class="right nowrap">{% if m.change %}{{ '+' if m.change > 0 else '−' }}{{ (m.change | abs) | qty }} {{ unit }}{% else %}–{% endif %}</td>
+        <td class="right nowrap">{{ m.balance_after | qty }} {{ unit }}</td>
+        <td>{{ m.user_name or '–' }}</td>
+        <td>{{ m.purpose or '' }}{% if m.reference %} <span class="muted">· {{ m.reference }}</span>{% endif %}</td>
+        <td class="nowrap">
+          {% if can_edit_movement(m) %}<a href="{{ url_for('movement_edit', mid=m.id, next=request.full_path) }}">Edit</a>{% endif %}
+          {% if m.edited_at %}<span class="tag tag-warn" title="Edited {{ m.edited_at[:16] }} by {{ m.edited_by }}">edited</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+  <p class="muted">No activity yet.</p>
+{% endif %}

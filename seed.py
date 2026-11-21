@@ -1,104 +1,138 @@
 """
-Load sample chemicals so you can try the app.
+Load sample data so you can try ChemTrack.
 
-WARNING: this deletes chemicals.db and starts fresh.
+WARNING: this erases all locations, chemicals, containers, movements, waste records,
+CHRA records and stocktakes. Staff accounts are kept. A backup is saved first.
+
 Run:  python seed.py
 """
 
 import sqlite3
 from datetime import date, timedelta
 
-from app import DB_PATH, SCHEMA
+from chemtrack.backup import backup_now
+from chemtrack.config import DB_PATH
+from chemtrack.db import migrate
 
 
 def days(n):
-    """Date n days from today, as YYYY-MM-DD (negative = in the past)."""
     return (date.today() + timedelta(days=n)).isoformat()
 
 
-# name, CAS, formula, hazards, location, qty, unit, reorder, supplier, lot, received, expiry, sds
-CHEMICALS = [
-    ("Ethanol absolute", "64-17-5", "C2H5OH", "Flammable,Irritant",
-     "Lab 1 – Flammable cabinet A", 4, "L", 2, "Merck", "K5012", days(-120), days(600), days(-400)),
-    ("Acetone", "67-64-1", "C3H6O", "Flammable,Irritant",
-     "Lab 2 – Shelf B", 2.5, "L", 1, "Fisher Scientific", "A221", days(-60), days(700), days(-300)),
-    ("Methanol HPLC grade", "67-56-1", "CH3OH", "Flammable,Acute Toxic,Health Hazard",
-     "Lab 1 – Flammable cabinet A", 0.5, "L", 1, "Merck", "M8890", days(-200), days(20), days(-900)),
-    ("n-Hexane", "110-54-3", "C6H14", "Flammable,Irritant,Health Hazard,Environmental",
-     "Lab 1 – Flammable cabinet A", 2, "L", 1, "Sigma-Aldrich", "H1102", days(-90), days(400), days(-2100)),
-    ("Hydrochloric acid 37%", "7647-01-0", "HCl", "Corrosive,Irritant",
-     "Lab 1 – Acid cabinet", 2.5, "L", 1, "Merck", "H3741", days(-150), days(500), days(-500)),
-    ("Sulfuric acid 98%", "7664-93-9", "H2SO4", "Corrosive",
-     "Lab 1 – Acid cabinet", 1, "L", 1, "Fisher Scientific", "S0098", days(-300), days(-10), days(-1000)),
-    ("Nitric acid 65%", "7697-37-2", "HNO3", "Oxidising,Corrosive",
-     "Lab 1 – Acid cabinet", 1.5, "L", 0.5, "Merck", "N6501", days(-100), days(450), days(-200)),
-    ("Sodium hydroxide pellets", "1310-73-2", "NaOH", "Corrosive",
-     "Lab 1 – Base cabinet", 800, "g", 500, "R&M Chemicals", "SH553", days(-45), days(900), days(-150)),
-    ("Potassium permanganate", "7722-64-7", "KMnO4", "Oxidising,Irritant,Environmental",
-     "Lab 2 – Shelf B", 250, "g", 100, "R&M Chemicals", "PP207", days(-30), days(1000), days(-100)),
-    ("Copper(II) sulfate pentahydrate", "7758-99-8", "CuSO4·5H2O", "Irritant,Environmental",
-     "Lab 2 – Shelf C", 500, "g", 200, "Systerm", "CS145", days(-400), days(800), None),
-    ("Sodium chloride", "7647-14-5", "NaCl", "",
-     "Lab 2 – Shelf C", 1, "kg", 0.5, "Systerm", "SC900", days(-500), days(1500), days(-700)),
+LOCATIONS = [  # room, unit, type, flammable limit (L)
+    ("Lab 1", "Flammable cabinet A", "Flammable cabinet", 10),
+    ("Lab 1", "Acid cabinet", "Acid cabinet", None),
+    ("Lab 1", "Base cabinet", "Base cabinet", None),
+    ("Lab 2", "Shelf B", "General shelf", 2),
+    ("Lab 2", "Shelf C", "General shelf", None),
+    ("Lab 2", "Poison cabinet", "Toxic / poison cabinet (locked)", None),
 ]
 
-# chemical, days ago, time, type, amount, name, purpose, reference
-USAGE = [
-    ("Ethanol absolute", 20, "09:15", "OUT", 0.5, "Afiq", "CHM101 practical", ""),
-    ("Acetone", 18, "10:30", "OUT", 0.5, "Kumar", "Cleaning glassware", ""),
-    ("Methanol HPLC grade", 15, "14:05", "OUT", 1, "Kumar", "HPLC mobile phase", ""),
-    ("Hydrochloric acid 37%", 14, "09:40", "OUT", 0.25, "Siti", "Titration lab", ""),
-    ("Ethanol absolute", 12, "11:20", "OUT", 1, "Siti", "Extraction practical", ""),
-    ("Sodium hydroxide pellets", 10, "08:50", "OUT", 200, "Afiq", "Preparing 1 M NaOH", ""),
-    ("Copper(II) sulfate pentahydrate", 9, "15:10", "OUT", 50, "Nurul", "Crystal growing practical", ""),
-    ("Potassium permanganate", 8, "10:00", "OUT", 25, "Siti", "Redox titration", ""),
-    ("Sodium hydroxide pellets", 6, "16:30", "IN", 500, "Afiq", "Restock", "PO-2611-009"),
-    ("Ethanol absolute", 5, "16:45", "IN", 2.5, "Afiq", "Restock", "PO-2611-014"),
-    ("Methanol HPLC grade", 4, "13:30", "OUT", 0.5, "Kumar", "HPLC mobile phase", ""),
-    ("Acetone", 3, "09:05", "OUT", 0.25, "Siti", "Cleaning glassware", ""),
-    ("Ethanol absolute", 2, "10:10", "OUT", 0.5, "Kumar", "Extraction practical", ""),
-    ("Hydrochloric acid 37%", 1, "09:30", "OUT", 0.25, "Nurul", "Titration lab", ""),
-    ("Sodium hydroxide pellets", 1, "11:00", "OUT", 100, "Nurul", "Preparing 0.1 M NaOH", ""),
+# name, CAS, formula, hazards, unit, reorder, is_cr, poison, precursor, SDS date (None = no SDS)
+SUBSTANCES = [
+    ("Ethanol absolute", "64-17-5", "C2H5OH", "Flammable,Irritant", "L", 2, 1, 0, 0, days(-400)),
+    ("Acetone", "67-64-1", "C3H6O", "Flammable,Irritant", "L", 1, 1, 0, 1, days(-300)),
+    ("Methanol HPLC grade", "67-56-1", "CH3OH", "Flammable,Acute Toxic,Health Hazard", "L", 1, 1, 1, 0, days(-900)),
+    ("n-Hexane", "110-54-3", "C6H14", "Flammable,Irritant,Health Hazard,Environmental", "L", 1, 1, 0, 0, days(-2100)),
+    ("Hydrochloric acid 37%", "7647-01-0", "HCl", "Corrosive,Irritant", "L", 1, 1, 0, 1, days(-500)),
+    ("Sulfuric acid 98%", "7664-93-9", "H2SO4", "Corrosive", "L", 1, 1, 0, 1, days(-1000)),
+    ("Nitric acid 65%", "7697-37-2", "HNO3", "Oxidising,Corrosive", "L", 0.5, 1, 0, 0, days(-200)),
+    ("Sodium hydroxide pellets", "1310-73-2", "NaOH", "Corrosive", "g", 500, 1, 0, 0, days(-150)),
+    ("Potassium permanganate", "7722-64-7", "KMnO4", "Oxidising,Irritant,Environmental", "g", 100, 1, 0, 1, days(-100)),
+    ("Copper(II) sulfate pentahydrate", "7758-99-8", "CuSO4·5H2O", "Irritant,Environmental", "g", 200, 1, 0, 0, None),
+    ("Sodium chloride", "7647-14-5", "NaCl", "", "kg", 0.5, 0, 0, 0, days(-700)),
 ]
 
+# substance, location index, size, amount left, lot, supplier, received (days ago), expiry (days from now)
+CONTAINERS = [
+    ("Ethanol absolute", 0, 2.5, 2.5, "K5012", "Merck", 120, 600),
+    ("Ethanol absolute", 0, 2.5, 1.0, "K5012", "Merck", 120, 600),
+    ("Acetone", 3, 2.5, 1.75, "A221", "Fisher Scientific", 60, 700),
+    ("Methanol HPLC grade", 0, 2.5, 0.5, "M8890", "Merck", 200, 20),
+    ("n-Hexane", 0, 2.5, 2.0, "H1102", "Sigma-Aldrich", 90, 400),
+    ("Hydrochloric acid 37%", 1, 2.5, 2.0, "H3741", "Merck", 150, 500),
+    ("Sulfuric acid 98%", 1, 2.5, 1.0, "S0098", "Fisher Scientific", 300, -10),
+    ("Nitric acid 65%", 1, 2.5, 1.5, "N6501", "Merck", 100, 450),
+    ("Sodium hydroxide pellets", 2, 500, 300, "SH553", "R&M Chemicals", 45, 900),
+    ("Sodium hydroxide pellets", 2, 500, 500, "SH560", "R&M Chemicals", 6, 950),
+    ("Potassium permanganate", 3, 250, 225, "PP207", "R&M Chemicals", 30, 1000),
+    ("Copper(II) sulfate pentahydrate", 4, 500, 450, "CS145", "Systerm", 400, 800),
+    ("Sodium chloride", 4, 1, 1, "SC900", "Systerm", 500, 1500),
+    ("Sodium chloride", 4, 1, 0, "SC880", "Systerm", 600, 1200),   # empty, waiting for disposal
+]
 
-def stamp(days_ago, hhmm):
-    return f"{days(-days_ago)} {hhmm}:00"
+# container index, days ago, time, amount used, who, purpose
+USES = [
+    (1, 20, "09:15", 0.5, "Afiq", "CHM101 practical"),
+    (2, 18, "10:30", 0.5, "Kumar", "Cleaning glassware"),
+    (3, 15, "14:05", 1.0, "Kumar", "HPLC mobile phase"),
+    (5, 14, "09:40", 0.25, "Siti", "Titration lab"),
+    (1, 12, "11:20", 1.0, "Siti", "Extraction practical"),
+    (8, 10, "08:50", 200, "Afiq", "Preparing 1 M NaOH"),
+    (11, 9, "15:10", 50, "Nurul", "Crystal growing practical"),
+    (10, 8, "10:00", 25, "Siti", "Redox titration"),
+    (3, 4, "13:30", 1.0, "Kumar", "HPLC mobile phase"),
+    (2, 3, "09:05", 0.25, "Siti", "Cleaning glassware"),
+    (5, 1, "09:30", 0.25, "Nurul", "Titration lab"),
+    (13, 2, "11:00", 1.0, "Nurul", "Brine preparation"),
+]
+
+WIPE = ["stocktake_items", "stocktakes", "waste_records", "assessments", "movements", "containers",
+        "substances", "locations"]
 
 
 def main():
+    migrate()
+    print(f"Backup first: {backup_now(label='before-seed')}")
     conn = sqlite3.connect(DB_PATH)
-    with conn:  # commits at the end of the block
-        conn.executescript(
-            "DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS chemicals;" + SCHEMA)
-        for c in CHEMICALS:
-            name, final_qty, received = c[0], c[5], c[10]
-            cur = conn.execute(
-                "INSERT INTO chemicals (name, cas_no, formula, hazards, location, quantity, unit,"
-                " min_quantity, supplier, lot_no, received_date, expiry_date, sds_date)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", c)
-            chem_id = cur.lastrowid
+    with conn:
+        for table in WIPE:
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name IN (%s)" % ",".join("?" * len(WIPE)), WIPE)
 
-            # Work backwards from today's quantity to find the opening stock,
-            # so every "balance after" in the history adds up correctly.
-            moves = [u for u in USAGE if u[0] == name]
-            net = sum(amt if kind == "IN" else -amt for _, _, _, kind, amt, *_ in moves)
-            balance = final_qty - net
+        loc_ids = [conn.execute("INSERT INTO locations (room, unit_name, storage_type, flammable_limit_l) "
+                                "VALUES (?, ?, ?, ?)", row).lastrowid for row in LOCATIONS]
+        sub_ids, units = {}, {}
+        for name, cas, formula, haz, unit, reorder, cr, poison, prec, sds in SUBSTANCES:
+            sub_ids[name] = conn.execute(
+                "INSERT INTO substances (name, cas_no, formula, hazards, unit, min_quantity, is_cr, is_poison, "
+                "is_precursor, sds_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, cas, formula, haz, unit, reorder, cr, poison, prec, sds)).lastrowid
+            units[name] = unit
 
-            conn.execute(
-                "INSERT INTO transactions (chemical_id, type, amount, balance_after, user_name,"
-                " purpose, reference, created_at) VALUES (?, 'IN', ?, ?, 'system', 'Opening stock', ?, ?)",
-                (chem_id, balance, balance, f"DO-{c[9]}", f"{received} 09:00:00"))
+        uses_by = {}
+        for ci, ago, hhmm, amount, who, purpose in USES:
+            uses_by.setdefault(ci, []).append((ago, hhmm, amount, who, purpose))
 
-            for _, ago, hhmm, kind, amt, who, purpose, ref in sorted(moves, key=lambda u: (-u[1], u[2])):
-                balance += amt if kind == "IN" else -amt
-                conn.execute(
-                    "INSERT INTO transactions (chemical_id, type, amount, balance_after, user_name,"
-                    " purpose, reference, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (chem_id, kind, amt, round(balance, 3), who, purpose, ref, stamp(ago, hhmm)))
+        for i, (name, li, size, left, lot, supplier, rcv, exp) in enumerate(CONTAINERS):
+            moves = sorted(uses_by.get(i, []), key=lambda u: (-u[0], u[1]))
+            start = left + sum(m[2] for m in moves)       # work back to what it held on arrival
+            size = max(size, start)
+            status = "active" if left > 0 else "empty"
+            cid = conn.execute(
+                "INSERT INTO containers (code, substance_id, location_id, size, amount, lot_no, supplier, "
+                "received_date, expiry_date, status, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (f"CT-{i + 1:05d}", sub_ids[name], loc_ids[li], size, left, lot, supplier, days(-rcv),
+                 days(exp), status, days(-rcv))).lastrowid
+            balance = start
+            conn.execute("INSERT INTO movements (container_id, type, change, balance_after, user_name, purpose, "
+                         "reference, created_at) VALUES (?, 'RECEIVE', ?, ?, 'system', 'Received', ?, ?)",
+                         (cid, start, start, f"DO-{lot}", f"{days(-rcv)} 09:00:00"))
+            for ago, hhmm, amount, who, purpose in moves:
+                balance = round(balance - amount, 6)
+                conn.execute("INSERT INTO movements (container_id, type, change, balance_after, user_name, "
+                             "purpose, created_at) VALUES (?, 'USE', ?, ?, ?, ?, ?)",
+                             (cid, -amount, balance, who, purpose, f"{days(-ago)} {hhmm}:00"))
+
+        conn.execute("INSERT INTO assessments (title, assessor, assessment_date, next_review, report_ref) "
+                     "VALUES (?, ?, ?, ?, ?)", ("Lab 1 and Lab 2 – teaching laboratories", "Sample assessor (JKKP/HQ/…)",
+                                                days(-1750), days(75), "CHRA-2021-07"))
+        conn.execute("INSERT INTO waste_records (description, sw_code, quantity, unit, disposed_date, contractor, "
+                     "user_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     ("Sample entry: replace with your real records", "SW (sample)", 5, "L", days(-30),
+                      "Licensed contractor", "system"))
     conn.close()
-
-    print(f"Loaded {len(CHEMICALS)} sample chemicals into {DB_PATH.name}")
+    print(f"Loaded {len(LOCATIONS)} locations, {len(SUBSTANCES)} chemicals, {len(CONTAINERS)} containers.")
 
 
 if __name__ == "__main__":

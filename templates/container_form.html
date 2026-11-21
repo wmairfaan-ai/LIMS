@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ c.code }}{% endblock %}
+{% block content %}
+<div class="narrow">
+  <div class="muted mono">{{ c.code }}</div>
+  <h1>Edit {{ c.name }} container</h1>
+  <p class="muted">To change the amount, use <strong>Use</strong> or <strong>Correct amount</strong> on the container page.</p>
+  <form class="form panel" method="post">
+    {{ csrf_field() }}
+    <div class="row">
+      <label>Lot No. <input name="lot_no" value="{{ c.lot_no or '' }}"></label>
+      <label>Supplier <input name="supplier" value="{{ c.supplier or '' }}"></label>
+    </div>
+    <div class="row">
+      <label>Received <input type="date" name="received_date" value="{{ c.received_date or '' }}"></label>
+      <label>Opened <input type="date" name="opened_date" value="{{ c.opened_date or '' }}"></label>
+      <label>Expiry <input type="date" name="expiry_date" value="{{ c.expiry_date or '' }}"></label>
+    </div>
+    <label>Notes <textarea name="notes" rows="2">{{ c.notes or '' }}</textarea></label>
+    <div class="actions">
+      <button type="submit">Save</button>
+      <a class="link" href="{{ url_for('container_view', code=c.code) }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

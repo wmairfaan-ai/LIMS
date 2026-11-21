@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR labels · ChemTrack</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="label-page">
+  <div class="no-print label-bar">
+    <strong>{{ rows | length }} label{{ 's' if rows | length != 1 }}</strong>
+    <span class="muted">Print on A4 sticker paper or plain paper and tape on. Size about 7 × 4 cm.</span>
+    <button onclick="window.print()">🖨️ Print</button>
+    <a class="link" href="{{ url_for('container_view', code=rows[0].c.code) if rows | length == 1 else url_for('index') }}">Back</a>
+  </div>
+  <div class="label-sheet">
+    {% for r in rows %}{% set c = r.c %}
+      <div class="label">
+        <div class="label-qr">{{ r.qr }}</div>
+        <div class="label-text">
+          <div class="label-code">{{ c.code }}</div>
+          <div class="label-name">{{ c.name }}</div>
+          <div class="label-meta">{% if c.cas_no %}CAS {{ c.cas_no }} · {% endif %}{{ c.size | qty }} {{ c.unit }}</div>
+          <div class="label-meta">Rcvd {{ c.received_date or '–' }}{% if c.expiry_date %} · Exp {{ c.expiry_date }}{% endif %}</div>
+          {% if c.lot_no %}<div class="label-meta">Lot {{ c.lot_no }}</div>{% endif %}
+          <div class="label-haz">{{ hazard_list(c) | join(' · ') }}</div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</body>
+</html>

@@ -1,43 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Stock movements{% endblock %}
+{% block title %}Movements{% endblock %}
 {% block content %}
-
 <h1>Stock movements</h1>
 
 <form class="toolbar filters" method="get">
   <label>From <input type="date" name="start" value="{{ filters.start }}"></label>
   <label>To <input type="date" name="end" value="{{ filters.end }}"></label>
-  <select name="type">
-    <option value="">In & out</option>
-    <option value="IN" {{ 'selected' if filters.type == 'IN' }}>Stock in only</option>
-    <option value="OUT" {{ 'selected' if filters.type == 'OUT' }}>Stock out only</option>
+  <select name="type" aria-label="Type">
+    <option value="">All types</option>
+    {% for key, label in TYPE_LABELS.items() %}<option value="{{ key }}" {{ 'selected' if filters.type == key }}>{{ label }}</option>{% endfor %}
   </select>
-  <select name="chemical">
+  <select name="substance" aria-label="Chemical">
     <option value="">All chemicals</option>
-    {% for c in chemicals %}
-      <option value="{{ c.id }}" {{ 'selected' if filters.chemical == c.id|string }}>{{ c.name }}</option>
-    {% endfor %}
+    {% for s in substances %}<option value="{{ s.id }}" {{ 'selected' if filters.substance == s.id|string }}>{{ s.name }}</option>{% endfor %}
   </select>
-  <input type="search" name="q" value="{{ filters.q }}" placeholder="Supplier, name, PO no., purpose">
+  <input type="search" name="q" value="{{ filters.q }}" placeholder="Code, supplier, name, PO, purpose">
   <button type="submit">Filter</button>
   <a class="link" href="{{ url_for('movements') }}">Reset</a>
-  <a class="button secondary" href="{{ url_for('export_movements', **filters) }}">Export CSV</a>
+  <a class="button secondary" href="{{ url_for('movements_csv', **filters) }}">Export CSV</a>
 </form>
 
 <section class="cards">
-  <div class="card"><span class="num in-num">{{ summary.in }}</span><span>Stock in</span></div>
-  <div class="card"><span class="num out-num">{{ summary.out }}</span><span>Stock out</span></div>
-  <div class="card"><span class="num">{{ summary.chemicals }}</span><span>Chemicals moved</span></div>
+  <div class="card"><span class="num in-num">{{ summary.in }}</span><span>Containers received</span></div>
+  <div class="card"><span class="num out-num">{{ summary.out }}</span><span>Uses</span></div>
+  <div class="card"><span class="num">{{ summary.substances }}</span><span>Chemicals involved</span></div>
   <div class="card"><span class="num">{{ summary.people }}</span><span>People</span></div>
 </section>
 
 {% if rows %}
 <div class="grid">
   <section class="panel">
-    <h2>Movements per day</h2>
-    <div class="chart" role="img" aria-label="Number of stock in and stock out movements per day">
+    <h2>Received vs used per day</h2>
+    <div class="chart" role="img" aria-label="Containers received and uses per day">
       {% for day, d in days %}
-        <div class="day" title="{{ day }}: {{ d.IN }} in, {{ d.OUT }} out">
+        <div class="day" title="{{ day }}: {{ d.IN }} received, {{ d.OUT }} used">
           <div class="stack">
             <div class="bar bar-out" style="height: {{ (d.OUT / busiest * 100) | round(1) }}%"></div>
             <div class="bar bar-in" style="height: {{ (d.IN / busiest * 100) | round(1) }}%"></div>
@@ -46,66 +42,41 @@
         </div>
       {% endfor %}
     </div>
-    <div class="legend"><span class="key key-in"></span>Stock in <span class="key key-out"></span>Stock out</div>
+    <div class="legend"><span class="key key-in"></span>Received <span class="key key-out"></span>Used</div>
   </section>
-
   <section class="panel">
     <h2>Most used chemicals</h2>
     {% if top_used %}
       <table class="compact">
-        <thead><tr><th>Chemical</th><th class="right">Times used</th><th class="right">Total used</th></tr></thead>
-        <tbody>
-          {% for u in top_used %}
-            <tr>
-              <td><a href="{{ url_for('view_chemical', chem_id=u.id) }}">{{ u.name }}</a></td>
-              <td class="right">{{ u.count }}</td>
-              <td class="right">{{ u.total | qty }} {{ u.unit }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
+        <thead><tr><th>Chemical</th><th class="right">Uses</th><th class="right">Total used</th></tr></thead>
+        <tbody>{% for u in top_used %}
+          <tr><td><a href="{{ url_for('substance_view', sid=u.id) }}">{{ u.name }}</a></td><td class="right">{{ u.count }}</td>
+              <td class="right">{{ u.total | qty }} {{ u.unit }}</td></tr>{% endfor %}</tbody>
       </table>
-    {% else %}
-      <p class="muted">No stock out in this period.</p>
-    {% endif %}
+    {% else %}<p class="muted">No uses in this period.</p>{% endif %}
   </section>
 </div>
 
 <div class="table-wrap">
 <table>
-  <thead>
-    <tr>
-      <th>Movement ID</th>
-      <th>Date & time</th>
-      <th>Type</th>
-      <th>Chemical</th>
-      <th class="right">Quantity</th>
-      <th class="right">Balance</th>
-      <th>Supplier</th>
-      <th>Reference</th>
-      <th>Name</th>
-      <th>Purpose</th>
-      <th></th>
-    </tr>
-  </thead>
+  <thead><tr><th>ID</th><th>When</th><th>What</th><th>Container</th><th class="right">Change</th><th class="right">Left</th>
+    <th>Location</th><th>Who</th><th>Purpose / reference</th><th></th></tr></thead>
   <tbody>
     {% for r in rows %}
       <tr>
         <td class="mono">{{ r.id | tx_code }}</td>
         <td class="nowrap">{{ r.created_at[:16] }}</td>
-        <td><span class="tag {{ 'tag-ok' if r.type == 'IN' else 'tag-out' }}">{{ 'In' if r.type == 'IN' else 'Out' }}</span></td>
-        <td>
-          <a href="{{ url_for('view_chemical', chem_id=r.chemical_id) }}">{{ r.name }}</a>
-          <div class="muted mono">{{ r.chemical_id | chem_code }}{% if r.lot_no %} · Lot {{ r.lot_no }}{% endif %}</div>
-        </td>
-        <td class="right">{{ '+' if r.type == 'IN' else '−' }}{{ r.amount | qty }} {{ r.unit }}</td>
-        <td class="right">{% if r.balance_after is not none %}{{ r.balance_after | qty }} {{ r.unit }}{% else %}–{% endif %}</td>
-        <td>{{ r.supplier or '–' }}</td>
-        <td>{{ r.reference or '–' }}</td>
+        <td><span class="mv mv-{{ r.type | lower }}">{{ TYPE_LABELS[r.type] }}</span></td>
+        <td><a href="{{ url_for('substance_view', sid=r.substance_id) }}">{{ r.name }}</a>
+          <div><a class="mono muted" href="{{ url_for('container_view', code=r.code) }}">{{ r.code }}</a>{% if r.lot_no %}<span class="muted"> · Lot {{ r.lot_no }}</span>{% endif %}</div></td>
+        <td class="right nowrap">{% if r.change %}{{ '+' if r.change > 0 else '−' }}{{ (r.change | abs) | qty }} {{ r.unit }}{% else %}–{% endif %}</td>
+        <td class="right nowrap">{{ r.balance_after | qty }} {{ r.unit }}</td>
+        <td class="small-text">{{ location_label(r) }}</td>
         <td>{{ r.user_name or '–' }}</td>
-        <td>{{ r.purpose or '–' }}</td>
+        <td>{{ r.purpose or '' }}{% if r.reference %} <span class="muted">· {{ r.reference }}</span>{% endif %}</td>
         <td class="nowrap">
-          {% if can_edit_movement(r) %}<a href="{{ url_for('edit_movement', tx_id=r.id, next=request.full_path) }}">Edit</a>{% endif %}
-          {% if r.edited_at %}<span class="tag tag-warn" title="Edited {{ r.edited_at[:16] }}{{ ' by ' ~ r.edited_by if r.edited_by }}">edited</span>{% endif %}
+          {% if can_edit_movement(r) %}<a href="{{ url_for('movement_edit', mid=r.id, next=request.full_path) }}">Edit</a>{% endif %}
+          {% if r.edited_at %}<span class="tag tag-warn" title="Edited {{ r.edited_at[:16] }} by {{ r.edited_by }}">edited</span>{% endif %}
         </td>
       </tr>
     {% endfor %}
@@ -113,7 +84,6 @@
 </table>
 </div>
 {% else %}
-  <p class="empty">No stock movements match these filters.</p>
+  <p class="empty">No movements match these filters.</p>
 {% endif %}
-
 {% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ s.name }}{% endblock %}
+{% block content %}
+
+<div class="head">
+  <div>
+    <div class="muted mono">{{ s.id | chem_code }}{% if s.cas_no %} · CAS {{ s.cas_no }}{% endif %}</div>
+    <h1>{{ s.name }} {% if s.formula %}<span class="muted">{{ s.formula }}</span>{% endif %}</h1>
+    <div>
+      {% for h in hazard_list(s) %}<span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span>{% endfor %}
+      {% if s.is_cr %}<span class="flag">USECHH CR</span>{% endif %}
+      {% if s.is_poison %}<span class="flag flag-red">Poison</span>{% endif %}
+      {% if s.is_precursor %}<span class="flag flag-red">Precursor</span>{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    {% if can_edit() %}
+      <a class="button secondary" href="{{ url_for('substance_edit', sid=s.id) }}">Edit</a>
+      <a class="button" href="{{ url_for('receive', substance=s.id) }}">Receive containers</a>
+    {% endif %}
+    {% if is_admin() %}
+      <form method="post" action="{{ url_for('substance_delete', sid=s.id) }}"
+            onsubmit="return confirm('Delete this chemical and all its records? This cannot be undone.');">
+        {{ csrf_field() }}<button class="danger-btn" type="submit">Delete</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if item.alerts %}<div class="alerts">{% for level, msg in item.alerts %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% endfor %}</div>{% endif %}
+
+<div class="grid">
+  <section class="panel">
+    <h2>Stock</h2>
+    <dl>
+      <dt>In stock</dt><dd class="big">{{ item.total | qty }} {{ s.unit }}</dd>
+      <dt>Containers</dt><dd>{{ item.n_active }} in use{% if item.n_empty %}, {{ item.n_empty }} empty{% endif %}{% if item.n_missing %}, <span class="text-danger">{{ item.n_missing }} missing</span>{% endif %}</dd>
+      <dt>Reorder level</dt><dd>{{ s.min_quantity | qty }} {{ s.unit }}</dd>
+      <dt>Stored in</dt><dd>{{ item.locations | join(', ') or '–' }}</dd>
+      {% if s.notes %}<dt>Notes</dt><dd>{{ s.notes }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Safety data sheet</h2>
+    {% if s.sds_file %}
+      <p><a class="button secondary" href="{{ url_for('sds_file', sid=s.id) }}" target="_blank" rel="noopener">📄 Open SDS (PDF)</a></p>
+    {% else %}
+      <p class="text-warn">No SDS uploaded. CLASS 2013 requires an SDS to be available to users.</p>
+    {% endif %}
+    <p class="muted">Revision date: {{ s.sds_date or 'not recorded' }}</p>
+    {% if can_edit() %}
+      <form class="form" method="post" action="{{ url_for('sds_upload', sid=s.id) }}" enctype="multipart/form-data">
+        {{ csrf_field() }}
+        <div class="row">
+          <label>{{ 'Replace' if s.sds_file else 'Upload' }} SDS (PDF, max {{ config.MAX_SDS_MB }} MB)
+            <input type="file" name="sds" accept="application/pdf,.pdf" required></label>
+          <label>Revision date <input type="date" name="sds_date" value="{{ s.sds_date or '' }}"></label>
+        </div>
+        <button type="submit" class="secondary-btn">Upload</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
+
+<section class="panel">
+  <h2>Containers</h2>
+  {% if containers %}
+  <div class="table-wrap flat">
+  <table>
+    <thead><tr><th>Code</th><th>Location</th><th class="right">Left</th><th>Lot</th><th>Expiry</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for c in containers %}
+        <tr class="{{ 'row-muted' if c.status == 'disposed' }}">
+          <td class="mono"><a href="{{ url_for('container_view', code=c.code) }}">{{ c.code }}</a></td>
+          <td>{{ location_label(c) }}</td>
+          <td class="right nowrap">
+            {{ c.amount | qty }} / {{ c.size | qty }} {{ s.unit }}
+            <div class="fill"><span style="width: {{ ((c.amount / c.size * 100) if c.size else 0) | round | int }}%"></span></div>
+          </td>
+          <td>{{ c.lot_no or '–' }}</td>
+          <td class="nowrap">{{ c.expiry_date or '–' }}</td>
+          <td>{% for level, msg in container_alerts(c) %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% else %}<span class="tag tag-ok">In use</span>{% endfor %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    <p class="muted">No containers yet. {% if can_edit() %}<a href="{{ url_for('receive', substance=s.id) }}">Receive the first one</a>.{% endif %}</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Recent activity</h2>
+  {% include "_movement_rows.html" %}
+</section>
+{% endblock %}

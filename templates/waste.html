@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Scheduled waste{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <h1>Scheduled waste log</h1>
+    <p class="muted">Environmental Quality (Scheduled Wastes) Regulations 2005. Use the SW code from the First Schedule (e.g. as on your eSWIS / consignment note).</p>
+  </div>
+</div>
+<div class="grid {{ 'staff-grid' if can_edit() }}">
+  {% if can_edit() %}
+  <section class="panel">
+    <h2>Add record</h2>
+    <form class="form" method="post">
+      {{ csrf_field() }}
+      <label>Description * <input name="description" required placeholder="Mixed halogenated solvent waste"></label>
+      <div class="row">
+        <label>SW code * <input name="sw_code" required list="swcodes" placeholder="SW …"></label>
+        <label>Date * <input type="date" name="disposed_date" required value="{{ today }}"></label>
+      </div>
+      <datalist id="swcodes">{% for c in used_codes %}<option value="{{ c }}">{% endfor %}</datalist>
+      <div class="row">
+        <label>Quantity <input name="quantity" type="number" step="any" min="0"></label>
+        <label>Unit <select name="unit"><option value="">–</option>{% for u in config.UNITS %}<option>{{ u }}</option>{% endfor %}</select></label>
+      </div>
+      <label>Contractor <input name="contractor"></label>
+      <label>Consignment note No. <input name="consignment_no"></label>
+      <label>Notes <input name="notes"></label>
+      <button type="submit">Save</button>
+      <small class="muted">Disposing a container from its page creates a record automatically.</small>
+    </form>
+  </section>
+  {% endif %}
+  <section class="panel">
+    <h2>Records <span class="muted">({{ rows | length }})</span></h2>
+    <div class="table-wrap flat">
+    <table>
+      <thead><tr><th>Date</th><th>SW code</th><th>Description</th><th class="right">Quantity</th><th>Contractor / note</th><th>By</th></tr></thead>
+      <tbody>
+        {% for w in rows %}
+          <tr>
+            <td class="nowrap">{{ w.disposed_date }}</td>
+            <td class="mono">{{ w.sw_code }}</td>
+            <td>{{ w.description }}{% if w.code %} <a class="mono" href="{{ url_for('container_view', code=w.code) }}">{{ w.code }}</a>{% endif %}</td>
+            <td class="right nowrap">{{ w.quantity | qty }} {{ w.unit or '' }}</td>
+            <td>{{ w.contractor or '–' }}{% if w.consignment_no %}<div class="muted">{{ w.consignment_no }}</div>{% endif %}</td>
+            <td>{{ w.user_name or '–' }}</td>
+          </tr>
+        {% else %}<tr><td colspan="6" class="muted">No records yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

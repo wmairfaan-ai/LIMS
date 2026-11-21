@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}{{ c.code }} {{ c.name }}{% endblock %}
+{% block content %}
+{% set unit = c.unit %}
+{% set live = c.status != 'disposed' %}
+
+<div class="head">
+  <div>
+    <div class="muted mono">Container {{ c.code }}</div>
+    <h1><a class="plain" href="{{ url_for('substance_view', sid=c.substance_id) }}">{{ c.name }}</a></h1>
+    <div>
+      {% for h in hazard_list(c) %}<span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span>{% endfor %}
+      {% for level, msg in alerts %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% endfor %}
+    </div>
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('labels', codes=c.code) }}" target="_blank" rel="noopener">🏷️ Print label</a>
+    {% if can_edit() and live %}<a class="button secondary" href="{{ url_for('container_edit', code=c.code) }}">Edit details</a>{% endif %}
+  </div>
+</div>
+
+<div class="container-top">
+  <section class="panel level-panel">
+    <div class="level">
+      <div class="level-num">{{ c.amount | qty }} <span>{{ unit }}</span></div>
+      <div class="muted">left of {{ c.size | qty }} {{ unit }}</div>
+      <div class="fill fill-lg"><span style="width: {{ ((c.amount / c.size * 100) if c.size else 0) | round | int }}%"></span></div>
+    </div>
+    <dl>
+      <dt>Location</dt><dd>{% if c.location_id %}<a href="{{ url_for('location_view', lid=c.location_id) }}">{{ location_label(c) }}</a>{% else %}–{% endif %}</dd>
+      <dt>Lot No.</dt><dd>{{ c.lot_no or '–' }}</dd>
+      <dt>Supplier</dt><dd>{{ c.supplier or '–' }}</dd>
+      <dt>Received</dt><dd>{{ c.received_date or '–' }}{% if c.owner_name %} by {{ c.owner_name }}{% endif %}</dd>
+      <dt>Opened</dt><dd>{{ c.opened_date or 'Not yet' }}</dd>
+      <dt>Expiry</dt><dd>{{ c.expiry_date or '–' }}</dd>
+      <dt>Last checked</dt><dd>{{ c.last_seen or 'Never' }}</dd>
+      <dt>SDS</dt><dd>{% if c.sds_file %}<a href="{{ url_for('sds_file', sid=c.substance_id) }}" target="_blank" rel="noopener">Open PDF</a>{% else %}<span class="text-warn">Not uploaded</span>{% endif %}</dd>
+      {% if c.notes %}<dt>Notes</dt><dd>{{ c.notes }}</dd>{% endif %}
+    </dl>
+  </section>
+  <section class="panel qr-panel">
+    {{ qr }}
+    <div class="mono center">{{ c.code }}</div>
+    <p class="muted center small-text">Scan with a phone camera to open this page.</p>
+  </section>
+</div>
+
+{% if can_edit() and live %}
+<div class="actions-grid">
+  {% if c.status == 'active' %}
+  <details class="action-card" open>
+    <summary>➖ Use</summary>
+    <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='use') }}">
+      {{ csrf_field() }}
+      <label>Amount used ({{ unit }}) <input name="amount" type="number" step="any" min="0" max="{{ c.amount }}" required></label>
+      <label>Purpose <input name="purpose" placeholder="CHM101 practical"></label>
+      <button type="submit">Record use</button>
+    </form>
+  </details>
+  {% endif %}
+  <details class="action-card">
+    <summary>↔️ Move</summary>
+    <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='move') }}">
+      {{ csrf_field() }}
+      <label>New location
+        <select name="location_id" required>
+          <option value="">Choose…</option>
+          {% for l in locations if l.id != c.location_id %}<option value="{{ l.id }}">{{ location_label(l) }} ({{ l.storage_type }})</option>{% endfor %}
+        </select></label>
+      <label>Reason <input name="purpose" placeholder="Reorganised cabinet"></label>
+      <button type="submit" class="secondary-btn">Move</button>
+    </form>
+  </details>
+  <details class="action-card">
+    <summary>⚖️ Correct amount</summary>
+    <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='adjust') }}">
+      {{ csrf_field() }}
+      <label>Measured amount now ({{ unit }}) <input name="new_amount" type="number" step="any" min="0" required></label>
+      <label>Reason * <input name="purpose" required placeholder="Weighed during stocktake"></label>
+      <button type="submit" class="secondary-btn">Save correction</button>
+    </form>
+  </details>
+  <details class="action-card">
+    <summary>🗑️ Dispose</summary>
+    <form class="form" method="post" action="{{ url_for('container_action', code=c.code, action='dispose') }}"
+          onsubmit="return confirm('Dispose of {{ c.code }}? It will be removed from stock.');">
+      {{ csrf_field() }}
+      <label>Reason <input name="purpose" placeholder="Expired / empty / contaminated"></label>
+      <label class="check"><input type="checkbox" name="waste" value="1" {{ 'checked' if c.amount > 0 }}> Record as scheduled waste</label>
+      <div class="row">
+        <label>SW code <input name="sw_code" placeholder="From the First Schedule"></label>
+        <label>Quantity ({{ unit }}) <input name="waste_qty" type="number" step="any" min="0" value="{{ c.amount if c.amount > 0 else '' }}"></label>
+      </div>
+      <div class="row">
+        <label>Contractor <input name="contractor"></label>
+        <label>Consignment note No. <input name="reference"></label>
+      </div>
+      <button type="submit" class="danger-btn">Dispose</button>
+    </form>
+  </details>
+</div>
+{% endif %}
+
+{% if waste %}
+<section class="panel"><h2>Disposal record</h2>
+  <p>{{ waste.disposed_date }} · <strong>{{ waste.sw_code }}</strong> · {{ waste.quantity | qty }} {{ waste.unit or '' }}
+    {% if waste.contractor %}· {{ waste.contractor }}{% endif %}{% if waste.consignment_no %} · note {{ waste.consignment_no }}{% endif %} · by {{ waste.user_name }}</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>History</h2>
+  {% include "_movement_rows.html" %}
+</section>
+{% endblock %}

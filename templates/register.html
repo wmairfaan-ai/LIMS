@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Chemical register' if kind == 'CR' else 'Chemical inventory' }}{% endblock %}
+{% block content %}
+<div class="head no-print">
+  <div>
+    <h1>{{ 'Chemical register (CR)' if kind == 'CR' else 'Chemical inventory (CI)' }}</h1>
+    <p class="muted">{{ 'Chemicals hazardous to health in use, as required by USECHH 2000.' if kind == 'CR' else 'All chemicals currently in use in the lab.' }}</p>
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('register_report', kind='CR' if kind == 'CI' else 'CI') }}">Show {{ 'register (CR)' if kind == 'CI' else 'inventory (CI)' }}</a>
+    <a class="button secondary" href="{{ url_for('register_csv', kind=kind) }}">Export CSV</a>
+    <button onclick="window.print()">🖨️ Print</button>
+  </div>
+</div>
+<h2 class="print-only">{{ 'Chemical register (USECHH 2000)' if kind == 'CR' else 'Chemical inventory' }} · printed {{ today }}</h2>
+
+<div class="table-wrap">
+<table class="print-table">
+  <thead><tr><th>No.</th><th>Chemical</th><th>CAS No.</th><th>GHS hazards</th><th class="right">Quantity</th>
+    <th>Location(s)</th><th>SDS</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><a href="{{ url_for('substance_view', sid=r.s.id) }}">{{ r.s.name }}</a>
+          {% if r.s.is_poison %}<span class="flag flag-red">Poison</span>{% endif %}</td>
+        <td class="mono nowrap">{{ r.s.cas_no or '–' }}</td>
+        <td>{{ r.hazards | join(', ') or '–' }}</td>
+        <td class="right nowrap">{{ r.total | qty }} {{ r.s.unit }}<div class="muted">{{ r.n }} container{{ 's' if r.n != 1 }}</div></td>
+        <td class="small-text">{{ r.locations | join('; ') }}</td>
+        <td class="nowrap">{% if r.s.sds_file %}Yes{% else %}<span class="text-warn">No</span>{% endif %}{% if r.s.sds_date %}<div class="muted">{{ r.s.sds_date }}</div>{% endif %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">{{ 'No chemicals marked as hazardous to health.' if kind == 'CR' else 'No chemicals in use.' }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

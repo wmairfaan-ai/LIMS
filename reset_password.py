@@ -13,7 +13,8 @@ import sys
 
 from werkzeug.security import generate_password_hash
 
-from app import DB_PATH, temporary_password
+from chemtrack.config import DB_PATH
+from chemtrack.views.auth import temporary_password
 
 
 def main():

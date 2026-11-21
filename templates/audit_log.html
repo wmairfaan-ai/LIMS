@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+<p class="muted">Every change to chemicals, containers, locations, CHRA, waste and accounts: who, what and when. The last 300 entries. Entries can't be edited.</p>
+<div class="table-wrap">
+<table class="compact">
+  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th><th>Details</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="nowrap">{{ r.created_at }}</td>
+        <td>{{ r.user_name }}</td>
+        <td>{{ r.action }}</td>
+        <td class="nowrap">{{ r.entity }}{% if r.entity_id %} #{{ r.entity_id }}{% endif %}</td>
+        <td class="mono small-text details">{{ r.details or '' }}</td>
+      </tr>
+    {% else %}<tr><td colspan="5" class="muted">Nothing yet.</td></tr>{% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

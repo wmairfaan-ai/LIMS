@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+{% set selected = (s.hazards or '').split(',') %}
+<h1>{{ title }}</h1>
+<p class="muted">This describes the chemical itself. Bottles are added afterwards with <strong>Receive containers</strong>.</p>
+
+<form class="form" method="post">
+  {{ csrf_field() }}
+  <fieldset>
+    <legend>Identity</legend>
+    <label>Chemical name *
+      <input name="name" value="{{ s.name or '' }}" required placeholder="Sodium hydroxide pellets">
+    </label>
+    <div class="row">
+      <label>CAS No.
+        <input name="cas_no" value="{{ s.cas_no or '' }}" placeholder="1310-73-2" pattern="\d{2,7}-\d{2}-\d">
+      </label>
+      <label>Formula
+        <input name="formula" value="{{ s.formula or '' }}" placeholder="NaOH">
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>GHS hazard classes</legend>
+    <div class="checks">
+      {% for h in config.GHS_HAZARDS %}
+        <label class="check"><input type="checkbox" name="hazards" value="{{ h }}" {{ 'checked' if h in selected }}>
+          <span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Regulatory (Malaysia)</legend>
+    <label class="check"><input type="checkbox" name="is_cr" {{ 'checked' if s.is_cr }}>
+      Chemical hazardous to health: include in the <strong>USECHH 2000 chemical register (CR)</strong></label>
+    <label class="check"><input type="checkbox" name="is_poison" {{ 'checked' if s.is_poison }}>
+      Listed under the <strong>Poisons Act 1952</strong>: keep locked, track every use</label>
+    <label class="check"><input type="checkbox" name="is_precursor" {{ 'checked' if s.is_precursor }}>
+      <strong>Controlled precursor / scheduled chemical</strong></label>
+    <small class="muted">Not sure? Check the chemical's SDS (sections 2 and 15) or ask your SHE officer.</small>
+  </fieldset>
+
+  <fieldset>
+    <legend>Stock rules and SDS</legend>
+    <div class="row">
+      <label>Unit
+        <select name="unit">{% for u in config.UNITS %}<option {{ 'selected' if s.unit == u }}>{{ u }}</option>{% endfor %}</select>
+        {% if editing %}<small>Changing the unit doesn't convert existing amounts.</small>{% endif %}
+      </label>
+      <label>Reorder level (total of all containers)
+        <input name="min_quantity" type="number" step="any" min="0" value="{{ s.min_quantity if s.min_quantity is not none else '' }}">
+      </label>
+      <label>SDS revision date
+        <input name="sds_date" type="date" value="{{ s.sds_date or '' }}">
+        <small>Upload the PDF on the chemical's page.</small>
+      </label>
+    </div>
+    <label>Notes <textarea name="notes" rows="2">{{ s.notes or '' }}</textarea></label>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit">{{ 'Save' if editing else 'Save and receive containers' }}</button>
+    <a class="link" href="{{ url_for('substance_view', sid=s.id) if editing else url_for('index') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ location_label(loc) }}{% endblock %}
+{% block content %}
+<div class="head">
+  <div>
+    <div class="muted">{{ loc.storage_type }}</div>
+    <h1>{{ location_label(loc) }}</h1>
+    {% if loc.notes %}<p class="muted">{{ loc.notes }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    <a class="button secondary" href="{{ url_for('emergency', location=loc.id) }}" target="_blank" rel="noopener">🚨 Print list</a>
+    {% if can_edit() %}
+      <form method="post" action="{{ url_for('stocktake_list') }}">{{ csrf_field() }}
+        <input type="hidden" name="location_id" value="{{ loc.id }}"><button type="submit" class="secondary-btn">Start stocktake</button></form>
+    {% endif %}
+    {% if is_admin() %}<a class="button secondary" href="{{ url_for('location_edit', lid=loc.id) }}">Edit</a>{% endif %}
+  </div>
+</div>
+
+{% if flam and (flam.litres or flam.limit is not none) %}
+<section class="panel {{ 'panel-danger' if flam.over }}">
+  <h2>Flammable liquids: {{ flam.litres | qty }} L{% if flam.limit is not none %} of {{ flam.limit | qty }} L allowed{% endif %}</h2>
+  {% if flam.limit is not none %}<div class="fill fill-lg {{ 'fill-over' if flam.over }}"><span style="width: {{ flam.pct }}%"></span></div>{% endif %}
+  {% if flam.over %}<p>Over the limit. Move some flammable containers to another approved location.</p>{% endif %}
+</section>
+{% endif %}
+
+{% for c in conflicts %}
+  <div class="flash flash-danger">⚠️ {{ c.a }} ({{ c.a_names | join(', ') }}) is stored with {{ c.b }} ({{ c.b_names | join(', ') }}). Move them apart.</div>
+{% endfor %}
+
+<section class="panel">
+  <h2>Containers here <span class="muted">({{ containers | length }})</span></h2>
+  {% if containers %}
+  <div class="table-wrap flat">
+  <table>
+    <thead><tr><th>Code</th><th>Chemical</th><th>Hazards</th><th class="right">Left</th><th>Expiry</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for c in containers %}
+        <tr>
+          <td class="mono"><a href="{{ url_for('container_view', code=c.code) }}">{{ c.code }}</a></td>
+          <td><a href="{{ url_for('substance_view', sid=c.substance_id) }}">{{ c.name }}</a></td>
+          <td>{% for h in hazard_list(c) %}<span class="haz haz-{{ h | lower | replace(' ', '-') }}">{{ h }}</span>{% endfor %}</td>
+          <td class="right nowrap">{{ c.amount | qty }} {{ c.unit }}</td>
+          <td class="nowrap">{{ c.expiry_date or '–' }}</td>
+          <td>{% for level, msg in container_alerts(c) %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% else %}<span class="tag tag-ok">OK</span>{% endfor %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="muted">Nothing stored here.</p>{% endif %}
+</section>
+{% endblock %}
