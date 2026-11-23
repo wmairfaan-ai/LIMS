@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Trace{% endblock %}
+{% block content %}
+<h1>Trace</h1>
+<p class="muted">Find every container from a lot, supplier or chemical, or everything a person handled. Shows where each
+  container is now and every movement on it. Use it for a supplier recall or an incident report.</p>
+
+<form class="toolbar filters" method="get">
+  <label>Lot No. <input type="search" name="lot" value="{{ f.lot }}" placeholder="e.g. K53212"></label>
+  <label>Supplier <input type="search" name="supplier" value="{{ f.supplier }}" placeholder="e.g. Merck"></label>
+  <select name="substance" aria-label="Chemical">
+    <option value="">Any chemical</option>
+    {% for s in substances %}<option value="{{ s.id }}" {{ 'selected' if f.substance == s.id|string }}>{{ s.name }}</option>{% endfor %}
+  </select>
+  <label>Person <input type="search" name="person" value="{{ f.person }}" placeholder="Name"></label>
+  <label>Movements from <input type="date" name="start" value="{{ f.start }}"></label>
+  <label>to <input type="date" name="end" value="{{ f.end }}"></label>
+  <button type="submit">Trace</button>
+  <a class="link" href="{{ url_for('trace') }}">Reset</a>
+  {% if containers %}<a class="button secondary" href="{{ url_for('trace_csv', **f) }}">Export CSV</a>{% endif %}
+</form>
+
+{% if containers is none %}
+  <div class="empty muted">Enter a lot number, supplier, chemical or person to start.</div>
+{% elif not containers %}
+  <div class="empty muted">No containers match.</div>
+{% else %}
+<section class="cards">
+  <div class="card"><span class="num">{{ summary.containers }}</span><span>Containers</span></div>
+  <div class="card"><span class="num">{{ summary.in_lab }}</span><span>Still in the lab{% if summary.missing %} ({{ summary.missing }} missing){% endif %}</span></div>
+  <div class="card"><span class="num">{{ summary.uses }}</span><span>Uses · {{ summary.used }}</span></div>
+  <div class="card"><span class="num">{{ summary.people }}</span><span>People involved</span></div>
+</section>
+
+<section class="panel">
+  <h2>Containers</h2>
+  <p class="muted small-text">Received in total: {{ summary.received }}.</p>
+  <div class="table-wrap flat">
+  <table class="compact">
+    <thead><tr><th>Container</th><th>Chemical</th><th>Lot No.</th><th>Supplier</th><th>Received</th>
+      <th>Status</th><th>Where now</th><th class="right">Left</th></tr></thead>
+    <tbody>
+      {% for c in containers %}
+        <tr class="{{ 'row-muted' if c.status == 'disposed' }}">
+          <td class="mono"><a href="{{ url_for('container_view', code=c.code) }}#history">{{ c.code }}</a></td>
+          <td>{{ c.name }}</td>
+          <td>{{ c.lot_no or '–' }}</td>
+          <td>{{ c.supplier or '–' }}</td>
+          <td class="nowrap">{{ c.received_date or '–' }}</td>
+          <td><span class="tag tag-{{ {'active': 'ok', 'empty': 'warn', 'missing': 'danger'}.get(c.status, 'muted') }}">{{ c.status | capitalize }}</span></td>
+          <td>{{ location_label(c) if c.status != 'disposed' else 'Disposed' }}</td>
+          <td class="right nowrap">{{ c.amount | qty }} / {{ c.size | qty }} {{ c.unit }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="panel">
+  <h2>Movements on these containers{% if f.person %} by “{{ f.person }}”{% endif %}</h2>
+  {% if movements %}
+  <div class="table-wrap flat">
+  <table class="compact">
+    <thead><tr><th>ID</th><th>When</th><th>Container</th><th>What</th><th class="right">Change</th>
+      <th>Who</th><th>Purpose / reference</th></tr></thead>
+    <tbody>
+      {% for m in movements %}
+        <tr>
+          <td class="mono">{{ m.id | tx_code }}</td>
+          <td class="nowrap">{{ m.created_at[:16] }}</td>
+          <td class="mono"><a href="{{ url_for('container_view', code=m.code) }}#history">{{ m.code }}</a><div class="muted">{{ m.name }}</div></td>
+          <td><span class="mv mv-{{ m.type | lower }}">{{ TYPE_LABELS[m.type] }}</span></td>
+          <td class="right nowrap">{% if m.change %}{{ '+' if m.change > 0 else '−' }}{{ (m.change | abs) | qty }} {{ m.unit }}{% else %}–{% endif %}</td>
+          <td>{{ m.user_name or '–' }}</td>
+          <td>{{ m.purpose or '' }}{% if m.reference %} <span class="muted">· {{ m.reference }}</span>{% endif %}
+            {% if m.edited_at %}<span class="tag tag-warn" title="Edited {{ m.edited_at[:16] }} by {{ m.edited_by }}">edited</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="muted">No movements in this date range.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

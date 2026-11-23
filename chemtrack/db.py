@@ -255,7 +255,12 @@ def migration_1(conn):
         _convert_legacy(conn)
 
 
-MIGRATIONS = [migration_1]   # add migration_2, migration_3 ... here, never edit old ones
+def migration_2(conn):
+    """Index so a container's full history can find its audit entries quickly."""
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity, entity_id)")
+
+
+MIGRATIONS = [migration_1, migration_2]   # add migration_3 ... here, never edit old ones
 
 
 def migrate(db_path=None):

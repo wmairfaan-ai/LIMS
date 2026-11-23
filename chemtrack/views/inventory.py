@@ -324,16 +324,16 @@ def receive():
 
 @app.route("/c/<code>")
 def container_view(code):
+    from .trace import container_history  # trace.py imports this module, so import here
     c = get_container_or_404(code)
     db = get_db()
-    log = db.execute("SELECT * FROM movements WHERE container_id = ? ORDER BY created_at DESC, id DESC",
-                     (c["id"],)).fetchall()
+    history = container_history(db, c)
     waste = db.execute("SELECT * FROM waste_records WHERE container_id = ?", (c["id"],)).fetchone()
     remember_scan(c["code"])
     opened = request.args.get("open", "")
     if opened not in ACTIONS:
         opened = "use" if c["status"] == "active" else ""
-    return render_template("container_view.html", c=c, log=log, waste=waste, locations=active_locations(),
+    return render_template("container_view.html", c=c, history=history, waste=waste, locations=active_locations(),
                            qr=qr_svg(container_url(c["code"])), alerts=logic.container_alerts(c), opened=opened)
 
 

@@ -2,21 +2,57 @@
 {% block title %}Audit log{% endblock %}
 {% block content %}
 <h1>Audit log</h1>
-<p class="muted">Every change to chemicals, containers, locations, CHRA, waste and accounts: who, what and when. The last 300 entries. Entries can't be edited.</p>
+<p class="muted">Every change to chemicals, containers, locations, CHRA, waste and accounts: who, what and when.
+  Entries can't be edited in ChemTrack. Stock uses are in <a href="{{ url_for('movements') }}">Movements</a>.</p>
+
+<form class="toolbar filters" method="get">
+  <label>From <input type="date" name="start" value="{{ f.start }}"></label>
+  <label>To <input type="date" name="end" value="{{ f.end }}"></label>
+  <select name="who" aria-label="Who">
+    <option value="">Everyone</option>
+    {% for v in options.user_name %}<option value="{{ v }}" {{ 'selected' if f.who == v }}>{{ v }}</option>{% endfor %}
+  </select>
+  <select name="action" aria-label="Action">
+    <option value="">All actions</option>
+    {% for v in options.action %}<option value="{{ v }}" {{ 'selected' if f.action == v }}>{{ v | first_upper }}</option>{% endfor %}
+  </select>
+  <select name="entity" aria-label="Record type">
+    <option value="">All records</option>
+    {% for v in options.entity %}<option value="{{ v }}" {{ 'selected' if f.entity == v }}>{{ v | first_upper }}</option>{% endfor %}
+  </select>
+  <input type="search" name="q" value="{{ f.q }}" placeholder="Search details, e.g. CT-00004">
+  <button type="submit">Filter</button>
+  <a class="link" href="{{ url_for('audit_log') }}">Reset</a>
+  <a class="button secondary" href="{{ url_for('audit_csv', **f) }}">Export CSV</a>
+</form>
+
+<p class="muted small-text">{{ total }} entr{{ 'y' if total == 1 else 'ies' }}{% if pages > 1 %} · page {{ page }} of {{ pages }}{% endif %}</p>
+
 <div class="table-wrap">
 <table class="compact">
   <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th><th>Details</th></tr></thead>
   <tbody>
     {% for r in rows %}
+      {% set link = audit_link(r) %}
       <tr>
-        <td class="nowrap">{{ r.created_at }}</td>
+        <td class="nowrap">{{ r.created_at }}<div class="muted mono">#{{ r.id }}</div></td>
         <td>{{ r.user_name }}</td>
-        <td>{{ r.action }}</td>
-        <td class="nowrap">{{ r.entity }}{% if r.entity_id %} #{{ r.entity_id }}{% endif %}</td>
-        <td class="mono small-text details">{{ r.details or '' }}</td>
+        <td>{{ r.action | first_upper }}</td>
+        <td class="nowrap">{% if link %}<a href="{{ link }}">{% endif %}{{ r.entity | first_upper }}{% if r.entity_id %} #{{ r.entity_id }}{% endif %}{% if link %}</a>{% endif %}</td>
+        <td class="small-text">
+          {% for label, text in audit_details(r) %}<div><span class="muted">{{ label }}:</span> {{ text }}</div>{% endfor %}
+        </td>
       </tr>
-    {% else %}<tr><td colspan="5" class="muted">Nothing yet.</td></tr>{% endfor %}
+    {% else %}<tr><td colspan="5" class="muted">{{ 'No entries match.' if f.values() | select | list else 'Nothing yet.' }}</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="button secondary" href="{{ url_for('audit_log', page=page - 1, **f) }}">← Newer</a>{% endif %}
+  <span class="muted">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="button secondary" href="{{ url_for('audit_log', page=page + 1, **f) }}">Older →</a>{% endif %}
+</nav>
+{% endif %}
 {% endblock %}

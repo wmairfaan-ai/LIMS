@@ -28,7 +28,7 @@
     </div>
     <dl>
       <dt>Location</dt><dd>{% if c.location_id %}<a href="{{ url_for('location_view', lid=c.location_id) }}">{{ location_label(c) }}</a>{% else %}–{% endif %}</dd>
-      <dt>Lot No.</dt><dd>{{ c.lot_no or '–' }}</dd>
+      <dt>Lot No.</dt><dd>{% if c.lot_no %}{{ c.lot_no }} · <a href="{{ url_for('trace', lot=c.lot_no) }}">Trace this lot</a>{% else %}–{% endif %}</dd>
       <dt>Supplier</dt><dd>{{ c.supplier or '–' }}</dd>
       <dt>Received</dt><dd>{{ c.received_date or '–' }}{% if c.owner_name %} by {{ c.owner_name }}{% endif %}</dd>
       <dt>Opened</dt><dd>{{ c.opened_date or 'Not yet' }}</dd>
@@ -108,9 +108,40 @@
 </section>
 {% endif %}
 
-<section class="panel">
-  <h2>History</h2>
-  {% include "_movement_rows.html" %}
+<section class="panel" id="history">
+  <div class="head">
+    <div>
+      <h2>Full history</h2>
+      <p class="muted small-text">Everything that happened to {{ c.code }}: stock movements, edits to its details,
+        corrected or deleted uses (with the old values), stocktake checks and disposal.</p>
+    </div>
+    <a class="button secondary" href="{{ url_for('container_history_csv', code=c.code) }}">Export CSV</a>
+  </div>
+  {% if history %}
+  <div class="table-wrap flat">
+  <table class="compact history">
+    <thead><tr><th>When</th><th>Event</th><th class="right">Change</th><th class="right">Left</th><th>Who</th>
+      <th>Details</th><th></th></tr></thead>
+    <tbody>
+      {% for e in history %}
+        <tr>
+          <td class="nowrap">{{ (e.when or '')[:16] }}{% if e.code %}<div class="muted mono">{{ e.code }}</div>{% endif %}</td>
+          <td><span class="mv mv-{{ e.kind }}">{{ e.label }}</span></td>
+          <td class="right nowrap">{{ e.amount or '–' }}</td>
+          <td class="right nowrap">{{ e.balance }}</td>
+          <td>{{ e.who or '–' }}</td>
+          <td>{% if e.link %}<a href="{{ e.link }}">{{ e.text }}</a>{% else %}{{ e.text }}{% endif %}
+            {% if e.ref %}<span class="muted">· {{ e.ref }}</span>{% endif %}</td>
+          <td class="nowrap">
+            {% if e.m and can_edit_movement(e.m) and live %}<a href="{{ url_for('movement_edit', mid=e.m.id, next=request.full_path) }}">Edit</a>{% endif %}
+            {% if e.m and e.m.edited_at %}<span class="tag tag-warn" title="Edited {{ e.m.edited_at[:16] }} by {{ e.m.edited_by }}">edited</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}<p class="muted">No activity yet.</p>{% endif %}
 </section>
 {% if request.args.get('open') and opened %}
 <script>

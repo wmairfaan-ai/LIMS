@@ -251,6 +251,66 @@ class ChemTrackTests(unittest.TestCase):
         self.assertIn("data-rate-note", html)
         self.assertIn("Average use over the last 1 day,", html)
 
+    # ------------------------------------------------------------ traceability
+    def test_20_container_full_history(self):
+        c = sql("SELECT * FROM containers WHERE code='CT-00001'")[0]
+        post(self.admin, "/c/CT-00001/edit", {"lot_no": c["lot_no"], "supplier": c["supplier"],
+                                              "received_date": c["received_date"] or "", "opened_date": c["opened_date"] or "",
+                                              "expiry_date": c["expiry_date"] or "", "notes": "Label replaced"},
+             page="/c/CT-00001/edit")
+        html = self.admin.get("/c/CT-00001").get_data(as_text=True)
+        history = html.split('id="history"', 1)[1]
+        for text in ["Received", "Use corrected", "0.5 → 1", "Moved", "Found in stocktake", "Details edited",
+                     "Label replaced", "Trace this lot"]:
+            self.assertIn(text, history if text != "Trace this lot" else html, text)
+        # Newest first: the detail edit just made comes before the original receipt
+        self.assertLess(history.index("Details edited"), history.index("Received"))
+        disposed = self.admin.get("/c/CT-00002").get_data(as_text=True).split('id="history"', 1)[1]
+        self.assertIn("Scheduled waste", disposed)
+        self.assertIn("SW code SW 322", disposed)
+        csv_text = self.admin.get("/c/CT-00001/history.csv").get_data(as_text=True)
+        self.assertTrue(csv_text.lstrip("﻿").startswith("Date & time,Event"))
+        self.assertIn("Use corrected", csv_text)
+
+    def test_21_trace_lot_and_person(self):
+        empty = self.admin.get("/trace").get_data(as_text=True)
+        self.assertIn("Enter a lot number", empty)
+        html = self.admin.get("/trace?lot=k5012").get_data(as_text=True)   # case-insensitive, partial match
+        self.assertIn("CT-00001", html)
+        self.assertIn("CT-00002", html)
+        self.assertNotIn("CT-00003", html)                                 # received without a lot number
+        self.assertIn("Disposed", html)
+        self.assertIn("No containers match.", self.admin.get("/trace?lot=NOPE").get_data(as_text=True))
+        person = self.admin.get(f"/trace?person={ADMIN[1]}").get_data(as_text=True)
+        self.assertIn("CT-00001", person)
+        csv_text = self.admin.get("/trace.csv?lot=K5012").get_data(as_text=True)
+        self.assertIn("CT-00001", csv_text)
+        self.assertIn("K5012", csv_text)
+        viewer = app.test_client()
+        post(viewer, "/login", {"staff_id": "TU-AUD-002", "password": "Viewer-Pass-1"})
+        self.assertEqual(viewer.get("/trace?lot=K5012").status_code, 200)   # read-only users can trace
+        self.assertEqual(viewer.get("/audit.csv").status_code, 403)         # but not read the audit log
+
+    def test_22_audit_log_filters_pages_export(self):
+        from chemtrack.views import trace
+        html = self.admin.get("/audit?action=dispose").get_data(as_text=True)
+        self.assertIn("Container:</span> CT-00002", html)
+        self.assertIn("Waste:</span> yes", html)
+        self.assertIn("1 entry", html)
+        self.assertIn(">Upload SDS<", self.admin.get("/audit").get_data(as_text=True))   # acronyms kept
+        self.assertIn("Old amount:</span> 0.5", self.admin.get("/audit?q=edit").get_data(as_text=True))
+        total = sql("SELECT COUNT(*) n FROM audit_log")[0]["n"]
+        csv_rows = self.admin.get("/audit.csv").get_data(as_text=True).strip().splitlines()
+        self.assertEqual(len(csv_rows), total + 1)
+        old_size, trace.AUDIT_PAGE_SIZE = trace.AUDIT_PAGE_SIZE, 2
+        try:
+            page2 = self.admin.get("/audit?page=2").get_data(as_text=True)
+            self.assertIn(f"page 2 of {-(-total // 2)}", page2)
+            self.assertIn("← Newer", page2)
+            self.assertEqual(self.admin.get("/audit?page=999").status_code, 200)   # clamps to the last page
+        finally:
+            trace.AUDIT_PAGE_SIZE = old_size
+
 
 class LegacyMigrationTest(unittest.TestCase):
     def test_old_database_is_converted(self):
