@@ -239,6 +239,18 @@ class ChemTrackTests(unittest.TestCase):
                      "/labels?codes=CT-00001", "/emergency", "/emergency?location=1", "/account/password"]:
             self.assertEqual(self.admin.get(page).status_code, 200, page)
 
+    def test_19_forecast_averages_over_recorded_days(self):
+        from chemtrack import logic
+        today = date(2026, 11, 23)
+        self.assertEqual(logic.usage_rate_days("2026-11-01 09:15:00", 90, today), 23)   # records started recently
+        self.assertEqual(logic.usage_rate_days("2025-01-01", 90, today), 90)            # records older than period
+        self.assertEqual(logic.usage_rate_days(None, 90, today), 90)                    # no use yet
+        self.assertEqual(logic.usage_rate_days("2026-11-30", 90, today), 1)             # clock oddities never divide by 0
+        # Uses in these tests are all from today, so the page must say it averaged over 1 day, not 90
+        html = self.admin.get("/analysis?period=90").get_data(as_text=True)
+        self.assertIn("data-rate-note", html)
+        self.assertIn("Average use over the last 1 day,", html)
+
 
 class LegacyMigrationTest(unittest.TestCase):
     def test_old_database_is_converted(self):

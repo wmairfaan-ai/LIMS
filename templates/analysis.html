@@ -21,8 +21,12 @@
 
 <section class="panel">
   <h2>Usage forecast and reorder plan</h2>
-  <p class="muted small">Average use over the last {{ period }} days, projected forward. "Order now" means it runs out within the
+  <p class="muted small">Average use over the last {{ rate_days }} day{{ 's' if rate_days != 1 }}, projected forward. "Order now" means it runs out within the
     {{ lead_time }}-day delivery time. Suggested order covers {{ cover_days }} days of use.</p>
+  {% if rate_days < period and first_use %}
+  <p class="small" data-rate-note>Use records only start on {{ first_use.strftime('%d %b %Y') }}, so averages use those
+    {{ rate_days }} day{{ 's' if rate_days != 1 }}, not {{ period }}. With less than 2 months of records, treat these forecasts as rough.</p>
+  {% endif %}
   {% if forecast %}
   <div class="table-wrap flat">
   <table>

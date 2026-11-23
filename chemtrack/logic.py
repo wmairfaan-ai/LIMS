@@ -141,6 +141,19 @@ def container_alerts(c):
     return alerts
 
 
+def usage_rate_days(first_use, period, today=None):
+    """
+    Number of days to average usage over: the analysis period, or fewer if USE records
+    only started inside it. Dividing by the full period when recording began recently
+    would understate how fast stock is used (and how soon it runs out).
+    """
+    first = parse_date(first_use)
+    if not first:
+        return period
+    today = today or date.today()
+    return max(1, min(period, (today - first).days + 1))
+
+
 # ------------------------------------------------------------------ storage --
 
 def active_containers(db, location_id=None):

@@ -101,6 +101,9 @@ def analysis():
         u["total"] -= t["change"]
         u["count"] += 1
 
+    first_use = db.execute("SELECT MIN(created_at) FROM movements WHERE type = 'USE'").fetchone()[0]
+    rate_days = logic.usage_rate_days(first_use, period, today)
+
     forecast, slow = [], []
     for i in items:
         s, u = i["s"], used.get(i["s"]["id"])
@@ -108,7 +111,7 @@ def analysis():
             if i["n_active"]:
                 slow.append(i)
             continue
-        per_day = u["total"] / period
+        per_day = u["total"] / rate_days
         days_left = i["total"] / per_day if per_day else None
         status = (("danger", "Order now") if days_left is not None and days_left <= config.LEAD_TIME_DAYS else
                   ("warn", "Order soon") if days_left is not None and days_left <= config.LEAD_TIME_DAYS + 30 else
@@ -179,6 +182,7 @@ def analysis():
                "slow": len(slow), "reorder": sum(f["status"][1] != "Enough" for f in forecast)}
     return render_template(
         "analysis.html", period=period, periods=config.ANALYSIS_PERIODS, start=start, summary=summary,
+        rate_days=rate_days, first_use=logic.parse_date(first_use),
         forecast=forecast, slow=slow, trend=trend, trend_max=trend_max, weekly=weekly, people=people,
         purposes=purposes, hazards=hazards, hazard_max=max((n for _, n in hazards), default=1),
         expiry=expiry, expiry_max=max((len(c) for _, _, c in expiry), default=1) or 1,
