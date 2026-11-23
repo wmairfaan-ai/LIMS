@@ -29,6 +29,7 @@
       <a href="{{ url_for('inventory') }}" class="{{ 'active' if ep in ('inventory', 'substance_view', 'substance_new', 'substance_edit', 'container_view', 'container_edit', 'receive', 'labels') }}">Inventory</a>
       <a href="{{ url_for('locations') }}" class="{{ 'active' if ep in ('locations', 'location_view', 'location_edit', 'emergency') }}">Locations</a>
       <a href="{{ url_for('movements') }}" class="{{ 'active' if ep in ('movements', 'movement_edit') }}">Movements</a>
+      <a href="{{ url_for('trace') }}" class="{{ 'active' if ep == 'trace' }}">Trace</a>
       <a href="{{ url_for('compliance') }}" class="{{ 'active' if ep in ('compliance', 'register_report', 'chra_form', 'waste', 'stocktake_list', 'stocktake_view', 'audit_log') }}">Compliance</a>
       <a href="{{ url_for('analysis') }}" class="{{ 'active' if ep == 'analysis' }}">Analysis</a>
       {% if is_admin() %}<a href="{{ url_for('staff_list') }}" class="{{ 'active' if ep in ('staff_list', 'login_history', 'staff_add', 'staff_reset') }}">Staff</a>{% endif %}

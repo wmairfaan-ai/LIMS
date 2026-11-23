@@ -266,11 +266,4 @@ def stocktake_finish(tid):
           else "Stocktake finished. Everything was found.", "warn" if missing else "ok")
     return redirect(url_for("stocktake_view", tid=tid))
 
-
-# ---------------------------------------------------------------- audit log --
-
-@app.route("/audit")
-@roles_required("admin")
-def audit_log():
-    rows = get_db().execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").fetchall()
-    return render_template("audit_log.html", rows=rows)
+# The audit log page lives in views/trace.py with the other traceability pages.
