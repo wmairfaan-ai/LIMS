@@ -1,24 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Stocktake #{{ t.id }}{% endblock %}
 {% block content %}
-{% set checked = expected | selectattr('id', 'in', found_ids) | list %}
 <div class="head">
   <div>
     <div class="muted">Stocktake #{{ t.id }} · started {{ t.started_at[:16] }} by {{ t.started_by }}</div>
     <h1>{{ location_label(t) }}</h1>
   </div>
-  <div class="progress-big"><strong>{{ checked | length }}</strong> / {{ expected | length }} found</div>
+  <div class="progress-big"><strong id="n-found">{{ n_found }}</strong> / <span id="n-expected">{{ expected | length }}</span> found</div>
 </div>
 
 {% if not t.finished_at and can_edit() %}
 <section class="panel scan-panel">
-  <form class="form scan-form" method="post" action="{{ url_for('stocktake_scan', tid=t.id) }}">
+  <form class="form scan-form" id="scan-form" method="post"
+        data-api="{{ url_for('api_stocktake_scan', tid=t.id) }}" action="{{ url_for('stocktake_scan', tid=t.id) }}">
     {{ csrf_field() }}
     <label>Scan or type a container code
       <input name="code" class="scan-input" placeholder="CT-00001" autocomplete="off" autofocus required></label>
     <button type="submit">Found</button>
   </form>
   <p class="muted small-text">Containers from another location are moved here automatically when scanned.</p>
+  <ol class="scan-log" id="scan-log" role="log" aria-label="Scans on this page, newest first"></ol>
 </section>
 {% elif t.finished_at %}
   <div class="flash flash-ok">Finished {{ t.finished_at[:16] }}.</div>
@@ -28,25 +29,17 @@
   <div class="table-wrap flat">
   <table>
     <thead><tr><th></th><th>Code</th><th>Chemical</th><th class="right">Recorded amount</th><th>Status</th></tr></thead>
-    <tbody>
-      {% for c in expected %}
-        <tr class="{{ 'row-found' if c.id in found_ids }}">
-          <td>{{ '✅' if c.id in found_ids else '⬜' }}</td>
-          <td class="mono"><a href="{{ url_for('container_view', code=c.code) }}">{{ c.code }}</a></td>
-          <td>{{ c.name }}</td>
-          <td class="right">{{ c.amount | qty }} {{ c.unit }}</td>
-          <td>{% for level, msg in container_alerts(c) %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% else %}<span class="tag tag-ok">In use</span>{% endfor %}</td>
-        </tr>
-      {% else %}<tr><td colspan="5" class="muted">No containers recorded here.</td></tr>{% endfor %}
+    <tbody id="stocktake-rows">
+      {% include "_stocktake_rows.html" %}
     </tbody>
   </table>
   </div>
 </section>
 
 {% if not t.finished_at and can_edit() %}
-<form method="post" action="{{ url_for('stocktake_finish', tid=t.id) }}"
-      onsubmit="return confirm('Finish? {{ (expected | length) - (checked | length) }} container(s) not scanned will be marked missing.');">
+<form method="post" id="finish-form" action="{{ url_for('stocktake_finish', tid=t.id) }}">
   {{ csrf_field() }}<button type="submit" class="danger-btn">Finish stocktake</button>
 </form>
+<script src="{{ url_for('static', filename='stocktake.js') }}"></script>
 {% endif %}
 {% endblock %}

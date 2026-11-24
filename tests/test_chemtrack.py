@@ -311,6 +311,77 @@ class ChemTrackTests(unittest.TestCase):
         finally:
             trace.AUDIT_PAGE_SIZE = old_size
 
+    def test_23_live_stocktake_scan(self):
+        lid = sql("SELECT id FROM locations WHERE unit_name = 'Shelf B'")[0]["id"]
+        r = post(self.admin, "/stocktake", {"location_id": lid})
+        tid = int(r.headers["Location"].rsplit("/", 1)[1])
+        page, api = f"/stocktake/{tid}", f"/api/stocktake/{tid}/scan"
+        self.assertIn("stocktake.js", self.admin.get(page).get_data(as_text=True))
+        moves = lambda: sql("SELECT COUNT(*) AS n FROM movements")[0]["n"]  # noqa: E731
+
+        # CT-00003 was marked missing by test 13: scanning brings it back
+        r = post(self.admin, api, {"code": " ct-00003 "}, page=page)
+        self.assertEqual((r.status_code, r.json["level"]), (200, "ok"))
+        self.assertIn("no longer missing", r.json["message"])
+        self.assertIn('class="row-found"', r.json["rows"])
+        self.assertGreaterEqual(r.json["found"], 1)
+        self.assertEqual(sql("SELECT status FROM containers WHERE code = 'CT-00003'")[0]["status"], "active")
+
+        # Scanning it again changes nothing
+        before = moves()
+        again = post(self.admin, api, {"code": "CT-00003"}, page=page).json
+        self.assertEqual((again["level"], again["found"], moves()), ("warn", r.json["found"], before))
+
+        # Scanning the QR label gives its web address: same container, both ways of saving
+        for text in ("http://127.0.0.1:5000/c/CT-00003", "HTTPS://CHEMTRACK.LAB.LOCAL/C/CT-00003/"):
+            self.assertIn("already scanned", post(self.admin, api, {"code": text}, page=page).json["message"])
+        r2 = post(self.admin, f"{page}/scan", {"code": "http://127.0.0.1:5000/c/CT-00003"}, page=page,
+                  follow_redirects=True)
+        self.assertIn("already scanned", r2.get_data(as_text=True))
+
+        # Unknown or empty codes save nothing
+        for code in ("CT-99999", "", "<b>x</b>"):
+            bad = post(self.admin, api, {"code": code}, page=page)
+            self.assertEqual((bad.status_code, bad.json["ok"], moves()), (200, False, before))
+
+        # A container from elsewhere is moved here, with a movement recorded, and joins the list
+        other = sql("SELECT code FROM containers WHERE location_id != ? AND status = 'active'", lid)[0]["code"]
+        moved = post(self.admin, api, {"code": other}, page=page).json
+        self.assertIn("moved here from", moved["message"])
+        self.assertIn(other, moved["rows"])
+        self.assertEqual(moves(), before + 1)
+        self.assertEqual(sql("SELECT location_id FROM containers WHERE code = ?", other)[0]["location_id"], lid)
+
+        # Problems come back as JSON, never as a page or a redirect to the sign-in page
+        self.assertEqual(self.admin.post(api, data={"code": "CT-00003"}).status_code, 400)  # no form token
+        self.assertTrue(self.admin.post(api, data={"code": "CT-00003"}).is_json)
+        self.assertEqual(post(self.admin, "/api/stocktake/9999/scan", {"code": "x"}, page=page).status_code, 404)
+        guest = app.test_client()
+        r = post(guest, api, {"code": "CT-00003"}, page="/login")
+        self.assertEqual((r.status_code, r.is_json), (401, True))
+
+        # After finishing, nothing more can be saved
+        post(self.admin, f"{page}/finish", page=page)
+        items = sql("SELECT COUNT(*) AS n FROM stocktake_items WHERE stocktake_id = ?", tid)[0]["n"]
+        r = post(self.admin, api, {"code": "CT-00003"}, page="/account/password")
+        self.assertEqual((r.status_code, r.json["finished"]), (409, True))
+        self.assertEqual(sql("SELECT COUNT(*) AS n FROM stocktake_items WHERE stocktake_id = ?", tid)[0]["n"], items)
+
+    def test_24_live_scan_refused_for_viewer(self):
+        html = post(self.admin, "/staff/add", {"staff_id": "TU-LAB-777", "name": "View Only", "role": "viewer"},
+                    page="/staff").get_data(as_text=True)
+        viewer = app.test_client()
+        post(viewer, "/login", {"staff_id": "TU-LAB-777", "password": temp_pw(html)})
+        api = "/api/stocktake/1/scan"
+        r = post(viewer, api, {"code": "CT-00001"}, page="/account/password")
+        self.assertEqual((r.status_code, r.is_json), (403, True))   # must choose a password first
+        self.assertIn("password", r.json["message"])
+        post(viewer, "/account/password", {"current": temp_pw(html), "password": "View-Pass-2026",
+                                           "confirm": "View-Pass-2026"})
+        r = post(viewer, api, {"code": "CT-00001"}, page="/account/password")
+        self.assertEqual((r.status_code, r.is_json), (403, True))
+        self.assertIn("role", r.json["message"])
+
 
 class LegacyMigrationTest(unittest.TestCase):
     def test_old_database_is_converted(self):

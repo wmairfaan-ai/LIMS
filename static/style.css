@@ -381,6 +381,16 @@ svg.qr { width: 180px; height: 180px; display: block; }
 .progress-big { font-size: 1.1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; }
 .progress-big strong { font-size: 1.6rem; color: var(--primary); }
 tr.row-found td { background: #f0fdf4; }
+.scan-log { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.scan-log:empty { display: none; }
+.scan-log li { display: flex; align-items: center; gap: 10px; margin: 0; padding: 8px 12px; border-radius: 8px;
+  background: #f3f4f6; color: #4b5563; font-size: .92rem; overflow-wrap: anywhere; }
+.scan-log li span { flex: 1; }
+.scan-log li:first-child { font-size: 1.05rem; font-weight: 600; }
+.scan-log .log-ok { background: var(--ok-bg); color: var(--ok); }
+.scan-log .log-warn { background: var(--warn-bg); color: var(--warn); }
+.scan-log .log-danger { background: var(--danger-bg); color: var(--danger); }
+.scan-log button { padding: 4px 12px; }
 
 /* Printable pages: labels, emergency list, register */
 .print-only { display: none; }

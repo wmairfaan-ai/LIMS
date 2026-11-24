@@ -4,7 +4,7 @@ import csv
 import io
 from datetime import date
 
-from flask import Response, abort, flash, g, redirect, render_template, request, url_for
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import app, config, logic
 from ..db import get_db, now_str
@@ -198,51 +198,85 @@ def get_stocktake_or_404(tid):
     return t
 
 
-@app.route("/stocktake/<int:tid>")
-def stocktake_view(tid):
-    db, t = get_db(), get_stocktake_or_404(tid)
-    found_ids = {r[0] for r in db.execute("SELECT container_id FROM stocktake_items WHERE stocktake_id = ?", (tid,))}
+def stocktake_rows(db, t):
+    """What should be in this location, and which of those containers have been scanned."""
+    found_ids = {r[0] for r in db.execute("SELECT container_id FROM stocktake_items WHERE stocktake_id = ?", (t["id"],))}
     expected = db.execute(
         "SELECT c.*, s.name, s.unit FROM containers c JOIN substances s ON s.id = c.substance_id "
         "WHERE c.location_id = ? AND c.status IN ('active', 'empty', 'missing') ORDER BY s.name, c.code",
         (t["location_id"],)).fetchall()
-    return render_template("stocktake_view.html", t=t, expected=expected, found_ids=found_ids)
+    return {"expected": expected, "found_ids": found_ids,
+            "n_found": sum(1 for c in expected if c["id"] in found_ids)}
+
+
+@app.route("/stocktake/<int:tid>")
+def stocktake_view(tid):
+    db, t = get_db(), get_stocktake_or_404(tid)
+    return render_template("stocktake_view.html", t=t, **stocktake_rows(db, t))
+
+
+def record_scan(db, t, code):
+    """Record one scanned container. Returns (level, message); saves only if the scan is valid."""
+    code = logic.scanned_code(code)
+    if not code:
+        return "danger", "Scan or type a container code."
+    c = db.execute("SELECT c.*, s.name, l.room, l.unit_name FROM containers c JOIN substances s ON s.id = c.substance_id "
+                   "LEFT JOIN locations l ON l.id = c.location_id WHERE c.code = ? COLLATE NOCASE", (code,)).fetchone()
+    if c is None:
+        return "danger", f"No container with code {code[:40]}."
+    if c["status"] == "disposed":
+        return "danger", f"{c['code']} ({c['name']}) is recorded as disposed. Check it and correct the record."
+
+    added = db.execute("INSERT OR IGNORE INTO stocktake_items (stocktake_id, container_id) VALUES (?, ?)",
+                       (t["id"], c["id"])).rowcount
+    db.execute("UPDATE containers SET last_seen = ? WHERE id = ?", (date.today().isoformat(), c["id"]))
+    notes = []
+    if c["location_id"] != t["location_id"]:
+        old = logic.location_label(c)
+        db.execute("UPDATE containers SET location_id = ? WHERE id = ?", (t["location_id"], c["id"]))
+        db.execute("INSERT INTO movements (container_id, type, change, balance_after, user_id, user_name, purpose) "
+                   "VALUES (?, 'TRANSFER', 0, ?, ?, ?, ?)",
+                   (c["id"], c["amount"], g.user["id"], g.user["name"],
+                    f"Found in stocktake #{t['id']}: {old} → {logic.location_label(t)}"))
+        notes.append(f"moved here from {old}")
+    if c["status"] == "missing":
+        db.execute("UPDATE containers SET status = ? WHERE id = ?",
+                   ("active" if c["amount"] > 0 else "empty", c["id"]))
+        notes.append("no longer missing")
+    db.commit()
+    if not added and not notes:
+        return "warn", f"{c['code']} {c['name']} was already scanned."
+    return "ok", f"✓ {c['code']} {c['name']}" + (f" ({', '.join(notes)})" if notes else "")
 
 
 @app.route("/stocktake/<int:tid>/scan", methods=["POST"])
 @roles_required("admin", "staff")
 def stocktake_scan(tid):
+    """The scan form without JavaScript: saves, then reloads the page."""
     db, t = get_db(), get_stocktake_or_404(tid)
     if t["finished_at"]:
         flash("This stocktake is finished.", "danger")
-        return redirect(url_for("stocktake_view", tid=tid))
-    code = request.form.get("code", "").strip()
-    c = db.execute("SELECT c.*, s.name, l.room, l.unit_name FROM containers c JOIN substances s ON s.id = c.substance_id "
-                   "LEFT JOIN locations l ON l.id = c.location_id WHERE c.code = ? COLLATE NOCASE", (code,)).fetchone()
-    if c is None:
-        flash(f"No container with code {code}.", "danger")
-    elif c["status"] == "disposed":
-        flash(f"{c['code']} ({c['name']}) is recorded as disposed. Check it and correct the record.", "danger")
     else:
-        db.execute("INSERT OR IGNORE INTO stocktake_items (stocktake_id, container_id) VALUES (?, ?)", (tid, c["id"]))
-        db.execute("UPDATE containers SET last_seen = ? WHERE id = ?", (date.today().isoformat(), c["id"]))
-        notes = []
-        if c["location_id"] != t["location_id"]:
-            old = logic.location_label(c)
-            new_amount = c["amount"]
-            db.execute("UPDATE containers SET location_id = ? WHERE id = ?", (t["location_id"], c["id"]))
-            db.execute("INSERT INTO movements (container_id, type, change, balance_after, user_id, user_name, purpose) "
-                       "VALUES (?, 'TRANSFER', 0, ?, ?, ?, ?)",
-                       (c["id"], new_amount, g.user["id"], g.user["name"],
-                        f"Found in stocktake #{tid}: {old} → {logic.location_label(t)}"))
-            notes.append(f"moved here from {old}")
-        if c["status"] == "missing":
-            db.execute("UPDATE containers SET status = ? WHERE id = ?",
-                       ("active" if c["amount"] > 0 else "empty", c["id"]))
-            notes.append("no longer missing")
-        db.commit()
-        flash(f"✓ {c['code']} {c['name']}" + (f" ({', '.join(notes)})" if notes else ""), "ok")
+        level, message = record_scan(db, t, request.form.get("code", ""))
+        flash(message, level)
     return redirect(url_for("stocktake_view", tid=tid))
+
+
+@app.route("/api/stocktake/<int:tid>/scan", methods=["POST"])
+@roles_required("admin", "staff")
+def api_stocktake_scan(tid):
+    """The same scan for static/stocktake.js: answers with JSON, so the page doesn't reload.
+
+    The whole list comes back each time, so two people scanning one location stay in step.
+    """
+    db, t = get_db(), get_stocktake_or_404(tid)
+    if t["finished_at"]:
+        return jsonify(ok=False, level="danger", finished=True, message="This stocktake is finished."), 409
+    level, message = record_scan(db, t, request.form.get("code", ""))
+    rows = stocktake_rows(db, t)
+    return jsonify(ok=level != "danger", level=level, message=message,
+                   found=rows["n_found"], expected=len(rows["expected"]),
+                   rows=render_template("_stocktake_rows.html", **rows))
 
 
 @app.route("/stocktake/<int:tid>/finish", methods=["POST"])
