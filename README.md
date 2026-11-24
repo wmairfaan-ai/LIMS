@@ -54,7 +54,8 @@ A chemical's stock = the total of its active containers.
 - **Chemical page**: details, regulatory flags, **SDS PDF** (upload / open), all its containers with fill gauges, recent activity
 - **Container page** (where the QR leads): amount left, location, lot, dates, **QR code**, actions (use, move, correct, dispose), history, print label
 - **Locations**: rooms and storage units, storage types, **flammable litres vs limit**, incompatible storage warnings, **🚨 printable emergency list** per room (for Bomba / lab door), start a **stocktake**
-- **Movements**: every movement with filters (date, type, chemical, search), charts, most used chemicals, CSV export
+- **Movements**: every movement with filters (date, type, chemical, search), 50 per page, charts, most used chemicals, CSV export.
+  The charts, totals and CSV always cover every matching movement, not only the page shown
 - **Compliance** (one page for audits):
   - **USECHH 2000**: Chemical Inventory (CI) and Chemical Register (CR, hazardous to health): printable and CSV
   - **CLASS 2013**: chemicals in use without an SDS, or with an SDS over 5 years old
@@ -132,7 +133,7 @@ python seed.py
 ```powershell
 python -m unittest discover -s tests -v
 ```
-29 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
+30 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
 recalculation, disposal + waste, SDS upload safety, stocktake, live stocktake scanning, registers, CHRA dates, roles,
 audit log, every page, and conversion of an old database). They use a temporary database.
 Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.

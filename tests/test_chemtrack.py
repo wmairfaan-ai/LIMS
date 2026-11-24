@@ -401,6 +401,54 @@ class ChemTrackTests(unittest.TestCase):
         self.assertEqual(sql("SELECT amount FROM containers WHERE code = ?", c["code"])[0]["amount"],
                          c["amount"] - 0.25)
 
+    def test_26_movements_pages(self):
+        from chemtrack.views import reports
+        total = sql("SELECT COUNT(*) n FROM movements")[0]["n"]
+        ids = lambda html: re.findall(r'<td class="mono">(TX-\d+)</td>', html)  # noqa: E731
+        cards = lambda html: re.findall(r'<span class="num[^"]*">(\d+)</span>', html)  # noqa: E731
+        get = lambda path: self.admin.get(path).get_data(as_text=True)  # noqa: E731
+        everything = get("/movements")
+        self.assertEqual(len(ids(everything)), total)
+        self.assertNotIn('class="pager"', everything)          # it all fits on one page
+        # The chart's days add up to the cards (received and used)
+        chart = re.findall(r'title="(\d{4}-\d\d-\d\d): (\d+) received, (\d+) used"', everything)
+        self.assertEqual(len({d for d, _, _ in chart}), len(chart))
+        self.assertEqual([str(sum(int(x[i]) for x in chart)) for i in (1, 2)], cards(everything)[:2])
+        old_size, reports.MOVEMENTS_PAGE_SIZE = reports.MOVEMENTS_PAGE_SIZE, 3
+        try:
+            pages = -(-total // 3)
+            self.assertGreater(pages, 2)
+            html = [get(f"/movements?page={n}") for n in range(1, pages + 1)]
+            # Every movement once, in the same order, with nothing lost between pages
+            self.assertEqual([i for h in html for i in ids(h)], ids(everything))
+            # Cards, chart and most used table still cover everything, on every page
+            for h in html:
+                self.assertEqual(cards(h), cards(everything))
+                self.assertEqual(h.split('class="grid"')[1].split("table-wrap")[0].split('class="muted small-text"')[0],
+                                 everything.split('class="grid"')[1].split("table-wrap")[0].split('class="muted small-text"')[0])
+            self.assertNotIn("← Newer", html[0])
+            self.assertNotIn("Older →", html[-1])
+            # Filters stay on when changing page, and Edit comes back to the same page
+            found = get("/movements?q=ethanol")
+            link = re.search(r'href="([^"]+)">Older', found).group(1).replace("&amp;", "&")
+            self.assertIn("q=ethanol", link)
+            page2 = get(link)
+            self.assertTrue(ids(page2))
+            self.assertFalse(set(ids(page2)) & set(ids(found)))
+            self.assertNotIn("Sodium chloride</a>", page2.split("<tbody>")[-1])
+            edits = [x for h in html[1:] for x in re.findall(r'href="(/movement/\d+/edit[^"]*)"', h)]
+            self.assertTrue(edits)
+            self.assertTrue(all("page%3D" in x for x in edits))
+            # Odd page numbers never fail
+            for odd in ("0", "-5", "abc", "", "²", "999999", "9" * 5000):
+                for path in ("/movements", "/audit"):
+                    self.assertEqual(self.admin.get(path, query_string={"page": odd}).status_code, 200, (path, odd[:9]))
+            self.assertEqual(ids(get("/movements?page=999")), ids(html[-1]))
+            # The CSV is never paged
+            self.assertEqual(len(get("/movements.csv?page=2").strip().splitlines()), total + 1)
+        finally:
+            reports.MOVEMENTS_PAGE_SIZE = old_size
+
 
 class LegacyMigrationTest(unittest.TestCase):
     def test_old_database_is_converted(self):
