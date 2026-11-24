@@ -62,7 +62,9 @@ A chemical's stock = the total of its active containers.
   - **Fire Services Act 1988**: flammable litres per location vs your permit / cabinet limit
   - **Poisons Act 1952 / precursors**: flagged chemicals and their stock
   - **Scheduled Wastes Regulations 2005**: waste log with SW codes, contractor, consignment note
-  - **Stocktake**: scan every container in a location; unscanned ones are marked **missing**
+  - **Stocktake**: scan every container in a location; unscanned ones are marked **missing**. Scans are saved live,
+    without reloading the page (`static/stocktake.js`). A scan that could not be saved shows **Retry**, and the
+    stocktake can't be finished until it is saved
 - **Analysis**: usage forecast and reorder plan, trends, uses by person / purpose, hazard profile, expiry outlook, slow-moving stock, suppliers
 - **Staff** (admin): accounts, roles, sign-in log, **audit log** (who changed what, when)
 
@@ -130,8 +132,8 @@ python seed.py
 ```powershell
 python -m unittest discover -s tests -v
 ```
-21 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
-recalculation, disposal + waste, SDS upload safety, stocktake, registers, CHRA dates, roles,
+29 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
+recalculation, disposal + waste, SDS upload safety, stocktake, live stocktake scanning, registers, CHRA dates, roles,
 audit log, every page, and conversion of an old database). They use a temporary database.
 Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.
 

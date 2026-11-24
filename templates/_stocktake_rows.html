@@ -1,0 +1,9 @@
+{% for c in expected %}
+  <tr class="{{ 'row-found' if c.id in found_ids }}">
+    <td>{{ '✅' if c.id in found_ids else '⬜' }}</td>
+    <td class="mono"><a href="{{ url_for('container_view', code=c.code) }}">{{ c.code }}</a></td>
+    <td>{{ c.name }}</td>
+    <td class="right">{{ c.amount | qty }} {{ c.unit }}</td>
+    <td>{% for level, msg in container_alerts(c) %}<span class="tag tag-{{ level }}">{{ msg }}</span>{% else %}<span class="tag tag-ok">In use</span>{% endfor %}</td>
+  </tr>
+{% else %}<tr><td colspan="5" class="muted">No containers recorded here.</td></tr>{% endfor %}

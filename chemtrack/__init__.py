@@ -14,7 +14,7 @@ Structure
 import secrets
 from datetime import datetime, timedelta
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from . import config, logic
 from .db import close_db, get_db, migrate
@@ -52,6 +52,15 @@ def favicon():
     return "", 204  # no icon file; stops browsers being sent to the sign-in page for it
 
 
+def is_api():
+    """Requests made by a page's own script. They get JSON back, never a page or a redirect."""
+    return request.path.startswith("/api/")
+
+
+def api_error(message, status):
+    return jsonify(ok=False, level="danger", message=message), status
+
+
 @app.before_request
 def load_user_and_protect():
     g.user = None
@@ -72,8 +81,12 @@ def load_user_and_protect():
     if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         return redirect(url_for("setup"))
     if g.user is None:
+        if is_api():
+            return api_error("You have been signed out. Sign in again, then repeat this.", 401)
         return redirect(url_for("login", next=request.full_path if request.method == "GET" else None))
     if g.user["must_change_password"] and request.endpoint not in ("change_password", "logout"):
+        if is_api():
+            return api_error("Choose your own password first, then repeat this.", 403)
         flash("Please choose your own password before continuing.", "warn")
         return redirect(url_for("change_password"))
     return None
@@ -108,17 +121,23 @@ app.jinja_env.filters.update(qty=logic.fmt_qty, chem_code=logic.chem_code, tx_co
 
 @app.errorhandler(403)
 def forbidden(_e):
+    if is_api():
+        return api_error("Your role doesn't allow this.", 403)
     return render_template("error.html", title="Not allowed",
                            message="Your role doesn't allow this. Ask the lab admin if you need access."), 403
 
 
 @app.errorhandler(404)
 def not_found(_e):
+    if is_api():
+        return api_error("That record doesn't exist.", 404)
     return render_template("error.html", title="Not found", message="That page or record doesn't exist."), 404
 
 
 @app.errorhandler(400)
 def bad_request(e):
+    if is_api():
+        return api_error(getattr(e, "description", "Bad request."), 400)
     return render_template("error.html", title="Something went wrong",
                            message=getattr(e, "description", "Bad request.")), 400
 

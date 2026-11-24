@@ -1,5 +1,6 @@
 """Business rules: alerts, storage checks, totals. No web code here, so it is easy to test."""
 
+import re
 from datetime import date, datetime, timedelta
 
 from . import config
@@ -43,6 +44,13 @@ def chem_code(i):
 
 def tx_code(i):
     return f"TX-{i:05d}"
+
+
+def scanned_code(text):
+    """The container code from a scan. QR labels hold a web address (…/c/CT-00042), so take its last part."""
+    text = (text or "").strip()
+    m = re.search(r"/c/([^/?#\s]+)", text, re.I)
+    return m.group(1) if m else text
 
 
 def next_container_codes(db, count):
