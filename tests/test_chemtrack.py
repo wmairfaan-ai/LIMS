@@ -118,6 +118,19 @@ class ChemTrackTests(unittest.TestCase):
         self.assertIn("CT-00001", dash.split("My recent scans", 1)[1])     # just opened
         self.assertIn("CT-00002", dash.split("Containers I received", 1)[1])
 
+    def test_06d_scan_boxes_accept_qr_address(self):
+        """QR labels hold a web address, so a scanner types all of it, whatever its host or letter case."""
+        for text in ("http://127.0.0.1:5000/c/CT-00001", "HTTPS://CHEMTRACK.LAB.LOCAL/C/CT-00001/"):
+            r = self.admin.get("/find", query_string={"code": text, "action": "move"})          # dashboard
+            self.assertIn("/c/CT-00001?open=move", r.headers["Location"])
+            r = self.admin.get("/inventory", query_string={"q": text})                          # top search box
+            self.assertEqual((r.status_code, r.headers.get("Location")), (302, "/c/CT-00001"))
+        r = self.admin.get("/find?code=http://127.0.0.1:5000/c/CT-99999", follow_redirects=True)
+        self.assertIn("No container with code CT-99999", r.get_data(as_text=True))
+        # Ordinary searches are left alone, even with "/c/" in them
+        self.assertEqual(self.admin.get("/find?code=a/c/b").headers["Location"], "/inventory?q=a/c/b")
+        self.assertIn('value="a/c/b"', self.admin.get("/inventory?q=a/c/b").get_data(as_text=True))
+
     def test_06c_sign_in_page_shows_counts_only(self):
         html = app.test_client().get("/login").get_data(as_text=True)
         self.assertIn("Compliance score", html)
@@ -381,6 +394,12 @@ class ChemTrackTests(unittest.TestCase):
         r = post(viewer, api, {"code": "CT-00001"}, page="/account/password")
         self.assertEqual((r.status_code, r.is_json), (403, True))
         self.assertIn("role", r.json["message"])
+
+    def test_25_stock_page_by_qr_address(self):
+        c = sql("SELECT code, amount FROM containers WHERE status = 'active' AND amount > 0.25")[0]
+        post(self.admin, "/stock", {"code": f"http://127.0.0.1:5000/c/{c['code']}", "amount": "0.25"})
+        self.assertEqual(sql("SELECT amount FROM containers WHERE code = ?", c["code"])[0]["amount"],
+                         c["amount"] - 0.25)
 
 
 class LegacyMigrationTest(unittest.TestCase):

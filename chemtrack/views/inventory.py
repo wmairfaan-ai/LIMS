@@ -116,7 +116,8 @@ def inventory():
     db = get_db()
     q = request.args.get("q", "").strip()
     show = request.args.get("show", "all")
-    if q and CODE_RE.match(q):
+    if CODE_RE.match(logic.scanned_code(q)):
+        q = logic.scanned_code(q)
         c = db.execute("SELECT code FROM containers WHERE code = ? COLLATE NOCASE", (q,)).fetchone()
         if c:
             return redirect(url_for("container_view", code=c["code"]))
@@ -152,6 +153,8 @@ ACTIONS = ("use", "move", "adjust", "dispose")
 def find():
     """Scan box: open the container, optionally with one action ready (?action=move)."""
     code = request.args.get("code", "").strip()
+    if CODE_RE.match(logic.scanned_code(code)):   # otherwise it's a search, so leave it as typed
+        code = logic.scanned_code(code)
     action = request.args.get("action", "")
     c = get_db().execute("SELECT code FROM containers WHERE code = ? COLLATE NOCASE", (code,)).fetchone()
     if c:
@@ -464,7 +467,7 @@ def labels():
 def stock_page():
     db = get_db()
     if request.method == "POST":
-        code = request.form.get("code", "").strip() or request.form.get("container", "")
+        code = logic.scanned_code(request.form.get("code")) or request.form.get("container", "")
         c = db.execute("SELECT code FROM containers WHERE code = ? COLLATE NOCASE", (code,)).fetchone()
         if c is None:
             flash("Scan or choose a container.", "danger")

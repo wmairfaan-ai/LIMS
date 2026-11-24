@@ -132,7 +132,7 @@ python seed.py
 ```powershell
 python -m unittest discover -s tests -v
 ```
-27 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
+29 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
 recalculation, disposal + waste, SDS upload safety, stocktake, live stocktake scanning, registers, CHRA dates, roles,
 audit log, every page, and conversion of an old database). They use a temporary database.
 Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.
