@@ -450,6 +450,24 @@ class ChemTrackTests(unittest.TestCase):
             reports.MOVEMENTS_PAGE_SIZE = old_size
 
 
+class DatabaseLocationTest(unittest.TestCase):
+    def test_database_found_outside_onedrive_once_moved(self):
+        from chemtrack import config
+        home, root = TMP / "home", TMP / "program"
+        (home / "ChemTrack-Data").mkdir(parents=True)
+        self.assertEqual(config.default_db_path(home, root), root / "chemicals.db")      # not moved
+        (home / "ChemTrack-Data" / "chemicals.db").write_bytes(b"")
+        self.assertEqual(config.default_db_path(home, root), home / "ChemTrack-Data" / "chemicals.db")
+        self.assertEqual(config.DB_PATH, TMP / "test.db")                                # CHEMTRACK_DB wins
+
+    def test_guard_folder_stops_an_empty_database_being_made(self):
+        guard = TMP / "guard" / "chemicals.db"     # a folder where the database used to be
+        guard.mkdir(parents=True)
+        with self.assertRaises(sqlite3.OperationalError):
+            dbmod.migrate(guard)
+        self.assertTrue(guard.is_dir())
+
+
 class LegacyMigrationTest(unittest.TestCase):
     def test_old_database_is_converted(self):
         path = TMP / "legacy.db"

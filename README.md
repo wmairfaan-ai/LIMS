@@ -122,18 +122,22 @@ python seed.py
 - `python serve.py` saves a backup **at start and every 24 hours** into `backups/`, keeping the newest 30.
   Backups use SQLite's safe online copy, so they're consistent even while people are working.
 - Back up any time: `python backup.py`
-- **Restore**: stop ChemTrack → copy a file from `backups/` over `chemicals.db` → start again.
+- **Restore**: stop ChemTrack → copy a file from `backups/` over the live `chemicals.db` → start again.
 - **Database upgrades are automatic and versioned** (`chemtrack/db.py`). Before any upgrade a
   `before-upgrade` backup is saved. Old data from the first ChemTrack version was converted:
   each chemical became one substance + one container (`CT-` + its old number), all history kept,
   and the original tables kept as `legacy_chemicals` / `legacy_transactions`.
-- This folder is in OneDrive, so backups are also synced to the cloud.
+- This folder is in OneDrive, so backups are also synced to the cloud, **while OneDrive is running**.
+- **Where the live database is**: `ChemTrack-Data\chemicals.db` in your Windows user folder if it exists, otherwise
+  `chemicals.db` in this folder (`CHEMTRACK_DB` overrides both). Keep the live file outside OneDrive, which can lock or
+  duplicate it while it is being written. After moving it, a *folder* named `chemicals.db` is left here on purpose: if the
+  moved file ever can't be found, ChemTrack stops with an error instead of starting with an empty database.
 
 ## Automated tests
 ```powershell
 python -m unittest discover -s tests -v
 ```
-30 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
+32 checks (security, dashboard scan actions, sign-in page privacy, receiving, labels, use/over-use, scanning, moving, correcting with
 recalculation, disposal + waste, SDS upload safety, stocktake, live stocktake scanning, registers, CHRA dates, roles,
 audit log, every page, and conversion of an old database). They use a temporary database.
 Use exactly this command: plain `python -m unittest` is blocked on purpose, because it would point at your real data.
