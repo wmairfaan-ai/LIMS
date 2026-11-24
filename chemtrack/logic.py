@@ -53,6 +53,16 @@ def scanned_code(text):
     return m.group(1) if m else text
 
 
+def page_of(text, total, size):
+    """(page, pages) for a paged list: anything odd in the address becomes the nearest real page."""
+    pages = max(1, -(-total // size))
+    try:
+        page = int(text)
+    except (TypeError, ValueError):
+        page = 1
+    return min(max(page, 1), pages), pages
+
+
 def next_container_codes(db, count):
     last = db.execute("SELECT MAX(id) FROM containers").fetchone()[0] or 0
     taken = {r[0] for r in db.execute("SELECT code FROM containers")}

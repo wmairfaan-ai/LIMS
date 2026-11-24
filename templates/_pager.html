@@ -1,0 +1,8 @@
+{# Newer / older links. Expects page, pages, pager_endpoint and pager_args (the filters to keep) #}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Pages">
+  {% if page > 1 %}<a class="button secondary" href="{{ url_for(pager_endpoint, page=page - 1, **pager_args) }}">← Newer</a>{% endif %}
+  <span class="muted">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="button secondary" href="{{ url_for(pager_endpoint, page=page + 1, **pager_args) }}">Older →</a>{% endif %}
+</nav>
+{% endif %}

@@ -48,11 +48,5 @@
 </table>
 </div>
 
-{% if pages > 1 %}
-<nav class="pager" aria-label="Pages">
-  {% if page > 1 %}<a class="button secondary" href="{{ url_for('audit_log', page=page - 1, **f) }}">← Newer</a>{% endif %}
-  <span class="muted">Page {{ page }} of {{ pages }}</span>
-  {% if page < pages %}<a class="button secondary" href="{{ url_for('audit_log', page=page + 1, **f) }}">Older →</a>{% endif %}
-</nav>
-{% endif %}
+{% with pager_endpoint = "audit_log", pager_args = f %}{% include "_pager.html" %}{% endwith %}
 {% endblock %}

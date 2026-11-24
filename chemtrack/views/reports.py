@@ -12,19 +12,19 @@ from ..db import get_db
 TYPE_LABELS = {"RECEIVE": "Received", "USE": "Used", "ADJUST": "Corrected", "TRANSFER": "Moved",
                "DISPOSE": "Disposed", "STOCKTAKE": "Stocktake"}
 app.jinja_env.globals["TYPE_LABELS"] = TYPE_LABELS
+MOVEMENTS_PAGE_SIZE = 50
 
 
-def query_movements(args):
+def movement_filter(args):
+    """The chosen filters, and the FROM / WHERE part (with its values) that every movements query shares."""
     today = date.today()
     start = logic.parse_date(args.get("start")) or today - timedelta(days=30)
     end = logic.parse_date(args.get("end")) or today
     if start > end:
         start, end = end, start
     mtype, sid, q = args.get("type", ""), args.get("substance", ""), args.get("q", "").strip()
-    sql = ("SELECT m.*, c.code, c.lot_no, c.supplier, s.id AS substance_id, s.name, s.cas_no, s.unit, "
-           "l.room, l.unit_name FROM movements m JOIN containers c ON c.id = m.container_id "
-           "JOIN substances s ON s.id = c.substance_id LEFT JOIN locations l ON l.id = c.location_id "
-           "WHERE date(m.created_at) BETWEEN ? AND ?")
+    sql = ("FROM movements m JOIN containers c ON c.id = m.container_id "
+           "JOIN substances s ON s.id = c.substance_id WHERE date(m.created_at) BETWEEN ? AND ?")
     params = [start.isoformat(), end.isoformat()]
     if mtype in TYPE_LABELS:
         sql += " AND m.type = ?"
@@ -36,39 +36,46 @@ def query_movements(args):
         sql += (" AND (s.name LIKE ? OR c.code LIKE ? OR c.supplier LIKE ? OR m.user_name LIKE ? "
                 "OR m.purpose LIKE ? OR m.reference LIKE ?)")
         params += [f"%{q}%"] * 6
-    rows = get_db().execute(sql + " ORDER BY m.created_at DESC, m.id DESC", params).fetchall()
-    return rows, {"start": start.isoformat(), "end": end.isoformat(), "type": mtype, "substance": sid, "q": q}
+    return {"start": start.isoformat(), "end": end.isoformat(), "type": mtype, "substance": sid, "q": q}, sql, params
+
+
+def movement_rows(db, sql, params, limit=-1, offset=0):
+    """Movements newest first (limit -1 = all of them)."""
+    sql = sql.replace(" WHERE ", " LEFT JOIN locations l ON l.id = c.location_id WHERE ", 1)
+    return db.execute(
+        "SELECT m.*, c.code, c.lot_no, c.supplier, s.id AS substance_id, s.name, s.cas_no, s.unit, "
+        f"l.room, l.unit_name {sql} ORDER BY m.created_at DESC, m.id DESC LIMIT ? OFFSET ?",
+        params + [limit, offset]).fetchall()
 
 
 @app.route("/movements")
 def movements():
-    rows, filters = query_movements(request.args)
-    uses = [r for r in rows if r["type"] == "USE"]
-    summary = {"in": sum(r["type"] == "RECEIVE" for r in rows), "out": len(uses),
-               "substances": len({r["substance_id"] for r in rows}),
-               "people": len({r["user_name"] for r in rows if r["user_name"]})}
-    usage = {}
-    for r in uses:
-        u = usage.setdefault(r["substance_id"], {"id": r["substance_id"], "name": r["name"], "unit": r["unit"],
-                                                 "total": 0, "count": 0})
-        u["total"] -= r["change"]
-        u["count"] += 1
-    top_used = sorted(usage.values(), key=lambda u: (-u["count"], -u["total"]))[:5]
-    daily = {}
-    for r in rows:
-        if r["type"] in ("RECEIVE", "USE"):
-            d = daily.setdefault(r["created_at"][:10], {"IN": 0, "OUT": 0})
-            d["IN" if r["type"] == "RECEIVE" else "OUT"] += 1
-    days = sorted(daily.items())[-31:]
+    db = get_db()
+    filters, sql, params = movement_filter(request.args)
+    # The cards, chart and most used table cover every matching movement, not only the page shown
+    t = db.execute("SELECT COUNT(*) AS total, SUM(m.type = 'RECEIVE') AS received, SUM(m.type = 'USE') AS used, "
+                   "COUNT(DISTINCT s.id) AS substances, COUNT(DISTINCT NULLIF(m.user_name, '')) AS people " + sql,
+                   params).fetchone()
+    summary = {"in": t["received"] or 0, "out": t["used"] or 0, "substances": t["substances"], "people": t["people"]}
+    top_used = db.execute("SELECT s.id, s.name, s.unit, -SUM(m.change) AS total, COUNT(*) AS count " + sql +
+                          " AND m.type = 'USE' GROUP BY s.id ORDER BY count DESC, total DESC, s.name LIMIT 5",
+                          params).fetchall()
+    daily = db.execute("SELECT substr(m.created_at, 1, 10) AS day, SUM(m.type = 'RECEIVE') AS n_in, "
+                       "SUM(m.type = 'USE') AS n_out " + sql + " AND m.type IN ('RECEIVE', 'USE') "
+                       "GROUP BY day ORDER BY day DESC LIMIT 31", params).fetchall()
+    days = [(d["day"], {"IN": d["n_in"], "OUT": d["n_out"]}) for d in reversed(daily)]
     busiest = max((d["IN"] + d["OUT"] for _, d in days), default=1) or 1
-    subs = get_db().execute("SELECT id, name FROM substances ORDER BY name COLLATE NOCASE").fetchall()
-    return render_template("movements.html", rows=rows, filters=filters, summary=summary, top_used=top_used,
-                           days=days, busiest=busiest, substances=subs)
+    page, pages = logic.page_of(request.args.get("page"), t["total"], MOVEMENTS_PAGE_SIZE)
+    rows = movement_rows(db, sql, params, MOVEMENTS_PAGE_SIZE, (page - 1) * MOVEMENTS_PAGE_SIZE)
+    subs = db.execute("SELECT id, name FROM substances ORDER BY name COLLATE NOCASE").fetchall()
+    return render_template("movements.html", rows=rows, total=t["total"], page=page, pages=pages, filters=filters,
+                           summary=summary, top_used=top_used, days=days, busiest=busiest, substances=subs)
 
 
 @app.route("/movements.csv")
 def movements_csv():
-    rows, f = query_movements(request.args)
+    f, sql, params = movement_filter(request.args)
+    rows = movement_rows(get_db(), sql, params)   # the export is never paged
     out = io.StringIO()
     w = csv.writer(out)
     w.writerow(["Movement ID", "Date & time", "Type", "Container", "Chemical", "CAS No.", "Change", "Unit",

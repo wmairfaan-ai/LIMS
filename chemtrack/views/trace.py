@@ -266,9 +266,7 @@ def audit_log():
     db = get_db()
     f, where, params = audit_query(request.args)
     total = db.execute(f"SELECT COUNT(*) FROM audit_log{where}", params).fetchone()[0]
-    pages = max(1, -(-total // AUDIT_PAGE_SIZE))
-    page = request.args.get("page", "1")
-    page = min(pages, int(page)) if page.isdigit() and int(page) > 0 else 1
+    page, pages = logic.page_of(request.args.get("page"), total, AUDIT_PAGE_SIZE)
     rows = db.execute(f"SELECT * FROM audit_log{where} ORDER BY id DESC LIMIT ? OFFSET ?",
                       params + [AUDIT_PAGE_SIZE, (page - 1) * AUDIT_PAGE_SIZE]).fetchall()
     options = {col: [r[0] for r in db.execute(

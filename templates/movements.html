@@ -57,6 +57,8 @@
   </section>
 </div>
 
+<p class="muted small-text">{{ total }} movement{{ 's' if total != 1 }}{% if pages > 1 %} · page {{ page }} of {{ pages }}. The figures above and the CSV cover all of them.{% endif %}</p>
+
 <div class="table-wrap">
 <table>
   <thead><tr><th>ID</th><th>When</th><th>What</th><th>Container</th><th class="right">Change</th><th class="right">Left</th>
@@ -83,6 +85,8 @@
   </tbody>
 </table>
 </div>
+
+{% with pager_endpoint = "movements", pager_args = filters %}{% include "_pager.html" %}{% endwith %}
 {% else %}
   <p class="empty">No movements match these filters.</p>
 {% endif %}
