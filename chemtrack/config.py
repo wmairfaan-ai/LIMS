@@ -5,7 +5,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-DB_PATH = Path(os.environ.get("CHEMTRACK_DB", ROOT / "chemicals.db"))
+
+def default_db_path(home=None, root=ROOT):
+    """The live database: in <home>/ChemTrack-Data if it has been moved there (outside OneDrive, which
+    can lock or duplicate a database while it is being written), otherwise next to the program."""
+    moved = Path(home or Path.home()) / "ChemTrack-Data" / "chemicals.db"
+    return moved if moved.is_file() else root / "chemicals.db"
+
+
+DB_PATH = Path(os.environ.get("CHEMTRACK_DB") or default_db_path())
 SECRET_KEY_PATH = ROOT / ".secret_key"
 UPLOAD_DIR = Path(os.environ.get("CHEMTRACK_UPLOADS", ROOT / "uploads"))
 BACKUP_DIR = Path(os.environ.get("CHEMTRACK_BACKUP_DIR", ROOT / "backups"))
